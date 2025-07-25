@@ -25,21 +25,19 @@ candles = pd.DataFrame()
 
 print('Starting optimized live trading loop...')
 
-# Wait until the system time is at a multiple of 5 minutes and 0 seconds
+# Fix the alignment loop at the start of the script
 while True:
     now = datetime.datetime.now()
     if now.minute % CANDLE_INTERVAL == 0 and now.second == 0:
         break
-    # Calculate seconds to next multiple of 5 minutes and 0 seconds
     next_minute = (now.minute // CANDLE_INTERVAL + 1) * CANDLE_INTERVAL
     if next_minute >= 60:
-        # Next hour
         next_time = now.replace(hour=(now.hour + 1) % 24, minute=0, second=0, microsecond=0)
     else:
         next_time = now.replace(minute=next_minute, second=0, microsecond=0)
     wait_seconds = (next_time - now).total_seconds()
     print(f"Waiting for next candle alignment... ({next_time.strftime('%Y-%m-%d %H:%M:%S')})")
-    time.sleep(max(1, int(wait_seconds)))
+    time.sleep(wait_seconds)
 
 def fetch_candles_optimized():
     """Optimized candle fetching with error handling"""
