@@ -163,7 +163,7 @@ class DeltaAPI:
 
  
 
-    def place_order(self, symbol, side, qty, order_type='limit_order', price=None, stop_loss=None, take_profit=None):
+    def place_order(self, symbol, side, qty, order_type='limit_order', price=None, stop_loss=None, take_profit=None, post_only=False):
         """
         Place a limit order using the improved signing method
         Stop loss will be managed through position monitoring since Delta Exchange doesn't support
@@ -197,7 +197,8 @@ class DeltaAPI:
             "bracket_stop_loss_price": stop_loss,
             "bracket_stop_loss_limit_price": stop_loss,  # usually same as stop loss price for limit
             "bracket_take_profit_price": take_profit,
-            "bracket_take_profit_limit_price": take_profit  # usually same as take profit price for limit
+            "bracket_take_profit_limit_price": take_profit,  # usually same as take profit price for limit
+            "post_only": post_only
         }
         
         headers, timestamp, message, signature = self.sign_request('POST', path, data)
@@ -455,3 +456,20 @@ class DeltaAPI:
         """Cleanup session"""
         if hasattr(self, 'session'):
             self.session.close()
+
+    def edit_bracket_order(self, order_id, stop_loss=None, take_profit=None):
+        """
+        Edit the stop loss and/or take profit of an existing bracket order.
+        """
+        path = f"/v2/orders/{order_id}/edit_bracket"
+        data = {}
+        if stop_loss is not None:
+            data["bracket_stop_loss_price"] = stop_loss
+            data["bracket_stop_loss_limit_price"] = stop_loss
+        if take_profit is not None:
+            data["bracket_take_profit_price"] = take_profit
+            data["bracket_take_profit_limit_price"] = take_profit
+        headers, timestamp, message, signature = self.sign_request("POST", path, data)
+        r = self.session.post(BASE_URL + path, headers=headers, json=data, timeout=10)
+        r.raise_for_status()
+        return r.json()

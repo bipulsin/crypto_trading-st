@@ -110,8 +110,12 @@ def execute_trade_optimized(decision):
                 qty=decision['qty'],
                 price=decision['price'],
                 stop_loss=decision['stop_loss'],
-                take_profit=take_profit
+                take_profit=take_profit,
+                post_only=True
             )
+            # Store the order_id for later stop loss updates
+            global last_order_id
+            last_order_id = result.get('id') if isinstance(result, dict) else None
             elapsed = time.time() - start_order_time
             log(f"✅ Main and Bracket stop loss orders placed successfully in {elapsed:.2f}s")
             if elapsed > 2.0:
@@ -189,8 +193,16 @@ while True:
                     pending_order_iterations = 0
                     last_order_id = None
             else:
-                log("Position open and SuperTrend unchanged. Skipping iteration.")
-                # Do not disturb the position
+                # Update stop loss to latest supertrend value
+                latest_supertrend = candles.iloc[-1]['supertrend']
+                if last_order_id is not None:
+                    try:
+                        api.edit_bracket_order(order_id=last_order_id, stop_loss=latest_supertrend)
+                        log(f"Updated stop loss to latest SuperTrend value: {latest_supertrend} for order {last_order_id}")
+                    except Exception as e:
+                        log(f"Failed to update stop loss for order {last_order_id}: {e}")
+                else:
+                    log(f"No last_order_id available to update stop loss.")
                 prev_supertrend_signal = last_signal
                 time.sleep(CANDLE_INTERVAL * 60)
                 continue
