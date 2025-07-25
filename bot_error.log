@@ -1,2 +1,0 @@
-/Users/bipulsahay/crypto_trading_1/run_trading_bot.sh: line 4: 12033 Killed: 9               /usr/bin/caffeinate -i python3 main.py
-/Users/bipulsahay/crypto_trading_1/run_trading_bot.sh: line 4: 12605 Killed: 9               /usr/bin/caffeinate -i venv/bin/python main.py
