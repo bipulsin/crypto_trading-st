@@ -102,16 +102,31 @@ def execute_trade_optimized(decision):
         try:
             api_side = 'buy' if decision['side'] == 'LONG' else 'sell'
             take_profit = decision['price'] + ((decision['price'] - decision['stop_loss']) * 1.5)
-            # Place new order and stop loss order after cleanup
-            start_order_time = time.time()
+            # Fetch best bid/ask
+            best_bid, best_ask = get_best_bid_ask()
+            order_price = decision['price']
+            post_only = True
+            if api_side == 'buy' and best_bid is not None:
+                # Set price just below best bid
+                if order_price >= best_bid:
+                    order_price = best_bid - 0.5  # or tick size
+                if order_price >= best_ask:
+                    # Would cross the spread, fallback to non-post-only
+                    post_only = False
+            elif api_side == 'sell' and best_ask is not None:
+                # Set price just above best ask
+                if order_price <= best_ask:
+                    order_price = best_ask + 0.5  # or tick size
+                if order_price <= best_bid:
+                    post_only = False
             result = api.place_order(
                 symbol=SYMBOL,
                 side=api_side,
                 qty=decision['qty'],
-                price=decision['price'],
+                price=order_price,
                 stop_loss=decision['stop_loss'],
                 take_profit=take_profit,
-                post_only=True
+                post_only=post_only
             )
             # Store the order_id for later stop loss updates
             global last_order_id
@@ -144,6 +159,25 @@ def send_notification_async(subject, body):
 prev_supertrend_signal = None
 pending_order_iterations = 0
 last_order_id = None
+
+# Add a function to get the best bid/ask from the order book
+
+def get_best_bid_ask():
+    try:
+        # Fetch order book from Delta Exchange
+        url = f"{api.BASE_URL}/v2/l2orderbook/{SYMBOL}"
+        r = api.session.get(url, timeout=5)
+        r.raise_for_status()
+        data = r.json()
+        if data.get("success") and data.get("result"):
+            bids = data["result"].get("buy", [])
+            asks = data["result"].get("sell", [])
+            best_bid = float(bids[0][0]) if bids else None
+            best_ask = float(asks[0][0]) if asks else None
+            return best_bid, best_ask
+    except Exception as e:
+        log(f"Error fetching order book: {e}")
+    return None, None
 
 # Main optimized trading loop
 while True:
