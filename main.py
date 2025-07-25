@@ -136,12 +136,18 @@ def send_notification_async(subject, body):
     #     print(f"Warning: Could not send notification: {e}")
     #     return False
 
+# --- New state tracking variables for enhanced logic ---
+prev_supertrend_signal = None
+pending_order_iterations = 0
+last_order_id = None
+
 # Main optimized trading loop
 while True:
     iteration_start = time.time()
-    
     try:
         # Step 1: Fetch candles (optimized)
+        # Align current time to the start of the minute (seconds = 0)
+        now = datetime.datetime.now().replace(second=0, microsecond=0)
         candles = fetch_candles_optimized()
         if candles is None or (isinstance(candles, pd.DataFrame) and candles.empty):
             log("No Delta Exchange candle data, trying Binance as fallback...")
@@ -153,47 +159,72 @@ while True:
             candles = pd.DataFrame(binance_candles)
             candles['datetime'] = pd.to_datetime(candles['time'], unit='s')
             candles = candles.sort_values('datetime')
-            
+
         # Step 2: Calculate SuperTrend (optimized)
         candles = calculate_supertrend_optimized(candles)
         if candles is None:
             log("Skipping iteration due to SuperTrend calculation error")
             time.sleep(30)
             continue
-            
-        # Step 3: Run strategy (optimized)
-        decision = run_strategy_optimized(candles, capital)
-        if decision is None:
-            log("Skipping iteration due to strategy error")
-            time.sleep(30)
-            continue
-            
-        # Step 4: Check for open orders/positions before placing a new order
+
+        # Step 3: Get SuperTrend signals
+        last_signal = int(candles.iloc[-1]['supertrend_signal'])
+        prev_signal = int(candles.iloc[-2]['supertrend_signal']) if len(candles) > 1 else last_signal
+
+        # Step 4: Get account state
         state = api.get_account_state(product_id=84)
-        if not state['has_orders'] and not state['has_positions']:
-            if decision['action']:
-                log("No open orders/positions. Placing new order based on SuperTrend signal.")
-                trade_success = execute_trade_optimized(decision)
-                if trade_success:
-                    subject = f"BTC Trade Executed: {decision['action']} {decision['side']}"
-                    body = f"Trade Details:\nAction: {decision['action']}\nSide: {decision['side']}\nQty: {decision['qty']:.6f}\nPrice: ${decision['price']:.2f}\nCapital: ${capital:.2f}\nPayback: ${decision['payback']}"
-                    send_notification_async(subject, body)
-                    if decision['payback'] > 0:
-                        log(f"Payback event: ${decision['payback']} deducted from capital.")
-                        capital -= decision['payback']
+        has_position = state['has_positions']
+        has_order = state['has_orders']
+
+        # --- Enhanced trading logic ---
+        if has_position:
+            # There is an open position
+            if prev_supertrend_signal is not None and last_signal != prev_supertrend_signal:
+                log("SuperTrend direction changed. Closing current position and opening new one.")
+                api.close_all_positions(84)
+                # Place new order in the new direction
+                decision = run_strategy_optimized(candles, capital)
+                if decision and decision['action']:
+                    execute_trade_optimized(decision)
+                    pending_order_iterations = 0
+                    last_order_id = None
+            else:
+                log("Position open and SuperTrend unchanged. Skipping iteration.")
+                # Do not disturb the position
+                prev_supertrend_signal = last_signal
+                time.sleep(CANDLE_INTERVAL * 60)
+                continue
+        elif not has_order:
+            # No active order or position
+            log("No active order. Placing new order based on SuperTrend signal.")
+            decision = run_strategy_optimized(candles, capital)
+            if decision and decision['action']:
+                execute_trade_optimized(decision)
+                pending_order_iterations = 0
+                last_order_id = None
         else:
-            log("Open order or position exists. Waiting for next opportunity.")
-            
+            # There is a pending order but no position
+            pending_order_iterations += 1
+            log(f"Pending order detected. Iteration count: {pending_order_iterations}")
+            if pending_order_iterations >= 3:
+                log("Pending order not filled after 3 iterations. Cancelling and placing new order.")
+                api.cancel_all_orders()
+                decision = run_strategy_optimized(candles, capital)
+                if decision and decision['action']:
+                    execute_trade_optimized(decision)
+                pending_order_iterations = 0
+                last_order_id = None
+
+        prev_supertrend_signal = last_signal
+
         # Performance monitoring
         iteration_time = time.time() - iteration_start
-        if iteration_time > 2.0:  # Log slow iterations
+        if iteration_time > 2.0:
             log(f"⚠️  Slow iteration: {iteration_time:.2f}s")
-        
-        # Sleep until next 5m candle
         now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log(f'Waiting for next candle... ({now_str}) - Iteration time: {iteration_time:.2f}s')
         time.sleep(CANDLE_INTERVAL * 60)
-        
+
     except Exception as e:
         log(f"Error in main loop: {e}")
         time.sleep(5)  # Reduced sleep time for faster recovery
