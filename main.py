@@ -117,6 +117,7 @@ def execute_trade_optimized(decision):
                     order_price = best_ask + 0.5  # or tick size
                 if order_price <= best_bid:
                     post_only = False
+            start_order_time = time.time()
             result = api.place_order(
                 symbol=SYMBOL,
                 side=api_side,
