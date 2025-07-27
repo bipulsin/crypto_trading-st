@@ -3,37 +3,49 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    print('python-dotenv not installed; environment variables from .env will not be loaded.')
+    pass
 
-
-# Delta Exchange API base URL - LIVE
-# BASE_URL = 'https://api.india.delta.exchange'
-# Delta Exchange API base URL - TEST
 BASE_URL = 'https://cdn-ind.testnet.deltaex.org'
-
-
-# Delta Exchange API credentials - LIVE
-# API_KEY = os.getenv('DELTA_API_KEY', 'B9t89bOwYNEv3faToie0Q2FSPQGVXV')
-#API_SECRET = os.getenv('DELTA_API_SECRET', 'SeE9hkDsbRHLFnsTT0L2MW6FXoIELhtqSEY3no6fI7P3VCD16qs4ACL27wIJ')
-
-# Delta Exchange API credentials - TEST
 API_KEY = os.getenv('DELTA_API_KEY_TEST', 'Dif1lSZl16ibEVhqKboD1UkQ5Z4qD7')
 API_SECRET = os.getenv('DELTA_API_SECRET_TEST', 'kjDLM1vF5GI8THQylfIBRyMmfrL3pkheUomTBmJLCVJHwVCz0Fuk5KCA5WYH')
-
-# Trading parameters
 SYMBOL = 'BTCUSD'
-SYMBOL_ID = 84  # Updated to match testnet product ID for LIVE use 27
-CAPITAL_MODE = '100%'  # Use 100% of available capital
-CANDLE_INTERVAL = 5  # minutes
+SYMBOL_ID = 84
+CAPITAL_MODE = '100%'
+CANDLE_INTERVAL = 5
 SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3
 ASSET_ID = 3
 
+# Live market data API parameters (for non-order related calls)
+LIVE_BASE_URL = 'https://api.india.delta.exchange'  # Currently same as BASE_URL
+LIVE_API_KEY = 'rNAuWihCMvnPLkIJSOEf3IThbQDhNJ'    # Currently same as API_KEY
+LIVE_API_SECRET = 'tsy1vGOYVu8BySBf3n8GIMJtns47Ca0Jq4444nQqjL61EyLWqjm4kqRFvUTJ'  # Currently same as API_SECRET
+LIVE_SYMBOL_ID = 27    # Currently same as SYMBOL_ID
 
+# Order management configuration
+RESPECT_EXISTING_ORDERS = True  # Set to False to cancel existing orders on startup
+AUTO_CANCEL_OLD_ORDERS = False  # Set to True to automatically cancel orders older than specified hours
+MAX_ORDER_AGE_HOURS = 24  # Maximum age of orders to keep (if AUTO_CANCEL_OLD_ORDERS is True)
 
-# Email notification settings (Gmail SMTP)
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 465
-EMAIL_USER = os.getenv('EMAIL_USER', 'webnetin@gmail.com')
-EMAIL_PASS = os.getenv('EMAIL_PASS', 'Bs2670!@')
-EMAIL_TO = os.getenv('EMAIL_TO', 'webnetin@gmail.com')
+# Risk management configuration
+MAX_CAPITAL_LOSS_PERCENT = 30  # Maximum loss percentage before closing existing orders
+VALIDATE_EXISTING_ORDERS = True  # Validate existing orders against SuperTrend and risk rules
+AUTO_CLOSE_INVALID_ORDERS = True  # Automatically close orders that violate trading rules
+
+# Trading configuration
+DEFAULT_CAPITAL = 200  # Default capital if balance cannot be retrieved
+LEVERAGE = 50  # Leverage used for position sizing
+POSITION_SIZE_PERCENT = 0.5  # Percentage of balance to use for each trade
+TAKE_PROFIT_MULTIPLIER = 1.5  # Multiplier for take profit calculation
+ORDER_PRICE_OFFSET = 0  # Price offset for limit orders ($100 above/below market)
+
+# Performance and monitoring
+MAX_ITERATION_TIME = 2.0  # Maximum acceptable iteration time in seconds
+PENDING_ORDER_MAX_ITERATIONS = 4  # Maximum iterations to wait for pending orders
+CANDLE_FALLBACK_ENABLED = True  # Enable Binance fallback for candle data
+
+# Order cancellation settings
+CANCELLATION_VERIFICATION_ENABLED = True  # Enable verification after cancellation
+CANCELLATION_VERIFICATION_ATTEMPTS = 2  # Number of verification attempts
+CANCELLATION_WAIT_TIME = 3  # Seconds to wait between cancellation attempts
+VERIFICATION_WAIT_TIME = 2  # Seconds to wait between verification attempts

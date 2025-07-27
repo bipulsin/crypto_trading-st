@@ -3,40 +3,33 @@ import time
 import hashlib
 import hmac
 import json
-from config import API_KEY, API_SECRET, BASE_URL, SYMBOL_ID, SYMBOL, ASSET_ID
+from config import API_KEY, API_SECRET, BASE_URL, SYMBOL_ID, SYMBOL, ASSET_ID, LIVE_API_KEY, LIVE_API_SECRET, LIVE_BASE_URL, LIVE_SYMBOL_ID
 import threading
 import concurrent.futures
 
 class DeltaAPI:
     def __init__(self):
-        # Use session for connection pooling
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'TradingBot/1.0',
             'Accept': 'application/json'
         })
-        
-        # Cache for frequently accessed data
         self._balance_cache = None
         self._balance_cache_time = 0
-        self._balance_cache_duration = 30  # Cache for 30 seconds
-        
+        self._balance_cache_duration = 30
         self._price_cache = None
         self._price_cache_time = 0
-        self._price_cache_duration = 5  # Cache for 5 seconds
-        
-        # Thread lock for cache updates
+        self._price_cache_duration = 5
         self._cache_lock = threading.Lock()
 
     def get_latest_price(self, symbol=SYMBOL):
-        """Optimized price fetching with caching"""
+        """Get latest price using LIVE parameters (market data)"""
         current_time = time.time()
-        
         with self._cache_lock:
             if (self._price_cache is None or 
                 current_time - self._price_cache_time > self._price_cache_duration):
                 try:
-                    url = f"{BASE_URL}/v2/tickers/{SYMBOL_ID}"
+                    url = f"{LIVE_BASE_URL}/v2/tickers/{LIVE_SYMBOL_ID}"
                     r = self.session.get(url, timeout=5)
                     r.raise_for_status()
                     data = r.json()
@@ -46,17 +39,12 @@ class DeltaAPI:
                     else:
                         raise Exception("Failed to get latest price")
                 except Exception as e:
-                    print(f"   ⚠️  Could not fetch latest price: {e}")
                     return None
-        
         return self._price_cache
 
     def get_candles(self, symbol=SYMBOL, interval='5m', limit=100, start=None, end=None):
-        """
-        Optimized candle fetching with connection pooling
-        Handles empty result gracefully and prints a warning.
-        """
-        url = f"{BASE_URL}/v2/history/candles"
+        """Get candle data using LIVE parameters (market data)"""
+        url = f"{LIVE_BASE_URL}/v2/history/candles"
         params = {
             'symbol': symbol,
             'resolution': interval,
@@ -67,24 +55,18 @@ class DeltaAPI:
         if end is not None:
             params['end'] = end
         try:
-            r = self.session.get(url, params=params, timeout=10)
+            r = self.session.get(url, params=params, timeout=20)  # Increased timeout
             r.raise_for_status()
             data = r.json()
             if data.get("success"):
-                if not data['result']:
-                    print("Warning: No candle data returned from Delta Exchange API.")
                 return data['result']
             else:
                 raise Exception("Failed to get candles")
         except Exception as e:
-            print(f"Error fetching candles: {e}")
             raise
 
     def get_candles_binance(self, symbol='BTCUSDT', interval='5m', limit=100):
-        """
-        Alternate method to fetch candles from Binance public API as a fallback.
-        Returns a list of dicts with keys: time, open, high, low, close, volume
-        """
+        """Get candle data from Binance (external API)"""
         import requests
         url = f'https://api.binance.com/api/v3/klines'
         params = {
@@ -106,18 +88,13 @@ class DeltaAPI:
                     'close': float(k[4]),
                     'volume': float(k[5])
                 })
-            print(f"Fetched {len(candles)} candles from Binance")
-            # print(candles)
-            print("--------------------------------")
             return candles
         except Exception as e:
-            print(f"Error fetching candles from Binance: {e}")
             return []
 
     def get_balance(self):
-        """Optimized balance fetching with caching"""
+        """Get account balance using ORIGINAL parameters (trading operations)"""
         current_time = time.time()
-        
         with self._cache_lock:
             if (self._balance_cache is None or 
                 current_time - self._balance_cache_time > self._balance_cache_duration):
@@ -127,31 +104,24 @@ class DeltaAPI:
                     r = self.session.get(BASE_URL + path, headers=headers, timeout=10)
                     r.raise_for_status()
                     data = r.json()
-                    
                     wallet_balance = 0
                     for bal in data["result"]:
                         if str(bal.get("asset_id")) == str(ASSET_ID):
                             wallet_balance = float(bal['available_balance'])
                             break
-                    
                     self._balance_cache = wallet_balance
                     self._balance_cache_time = current_time
                 except Exception as e:
-                    print(f"   ⚠️  Could not fetch wallet balance: {e}")
                     return 0
-        
         return self._balance_cache
 
     def sign_request(self, method, path, body=None):
-        """
-        Sign request using HMAC SHA256 with proper message format
-        """
-        timestamp = str(int(time.time()))  # Use seconds, not milliseconds
+        timestamp = str(int(time.time()))
         if body is None:
             body = ""
         else:
-            body = json.dumps(body)  # Use default formatting with spaces
-        message = method + timestamp + path + body  # Correct order for signature
+            body = json.dumps(body)
+        message = method + timestamp + path + body
         signature = hmac.new(API_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()
         headers = {
             "api-key": API_KEY,
@@ -161,17 +131,26 @@ class DeltaAPI:
         }
         return headers, timestamp, message, signature
 
- 
+    def sign_request_live(self, method, path, body=None):
+        """Sign request using live API credentials for non-order related calls"""
+        timestamp = str(int(time.time()))
+        if body is None:
+            body = ""
+        else:
+            body = json.dumps(body)
+        message = method + timestamp + path + body
+        signature = hmac.new(LIVE_API_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()
+        headers = {
+            "api-key": LIVE_API_KEY,
+            "timestamp": timestamp,
+            "signature": signature,
+            "Content-Type": "application/json"
+        }
+        return headers, timestamp, message, signature
 
-    def place_order(self, symbol, side, qty, order_type='limit_order', price=None, stop_loss=None, take_profit=None, post_only=False):
-        """
-        Place a limit order using the improved signing method
-        Stop loss will be managed through position monitoring since Delta Exchange doesn't support
-        direct stop loss orders in the way we need
-        """
-        start_time = time.time()
+    def place_order(self, symbol, side, qty, order_type='limit_order', price=None, stop_loss=None, take_profit=None, post_only=False, max_retries=3):
+        """Place order using ORIGINAL parameters (trading operations)"""
         if price is not None:
-            print(f"🚀 Placing order: {side} {order_type} {qty} at ${price:.2f}")
             if stop_loss is not None:
                 stop_loss = round(float(stop_loss), 2)
             else:
@@ -180,64 +159,76 @@ class DeltaAPI:
                 take_profit = round(float(take_profit), 2)
             else:
                 take_profit = price + 100
-        else:
-            print(f"🚀 Placing order: {side} {order_type} {qty} at market")
- 
         url = f"{BASE_URL}/v2/orders"
         path = "/v2/orders"
         qty = int(qty)
- 
         data = {
             'product_id': SYMBOL_ID,
             'side': side,
             'order_type': 'limit_order',
             'size': qty,
-            "limit_price": price,  # entry price for the bracket order
+            "limit_price": price,
             "time_in_force": "gtc",
             "bracket_stop_loss_price": stop_loss,
-            "bracket_stop_loss_limit_price": stop_loss,  # usually same as stop loss price for limit
+            "bracket_stop_loss_limit_price": stop_loss,
             "bracket_take_profit_price": take_profit,
-            "bracket_take_profit_limit_price": take_profit,  # usually same as take profit price for limit
+            "bracket_take_profit_limit_price": take_profit,
             "post_only": post_only
         }
-        
         headers, timestamp, message, signature = self.sign_request('POST', path, data)
         
-        # OPTIMIZATION: Reduced debug output for faster execution
-        # print(f"DEBUG - URL: {url}")
-        # print(f"DEBUG - Headers: {headers}")
-        #print(f"DEBUG - Body: {json.dumps(data)}")
-        # print(f"DEBUG - Timestamp: {timestamp}")
-        # print(f"DEBUG - Signature: {signature}")
-        
-        try:
-            r = self.session.post(url, headers=headers, json=data, timeout=15)
-            r.raise_for_status()
-            result = r.json()['result']
-        except requests.exceptions.HTTPError as e:
-            print(f"❌ Error placing order: {e}")
+        for attempt in range(max_retries):
             try:
-                print(f"API response: {r.text}")
-            except Exception:
-                pass
-            raise
-        except Exception as e:
-            print(f"❌ Error placing order: {e}")
-            raise
-        
-        # Store stop loss information for manual monitoring
-       
-        
-        execution_time = time.time() - start_time
-        print(f"⚡ Order placed in {execution_time:.3f} seconds")
-        
-        return result
-
+                # Increase timeout for order placement
+                r = self.session.post(url, headers=headers, json=data, timeout=30)
+                r.raise_for_status()
+                response_data = r.json()
+                
+                # Check if the response is successful
+                if not response_data.get('success'):
+                    raise Exception(f"Order placement failed: {response_data.get('message', 'Unknown error')}")
+                
+                result = response_data['result']
+                print(f"Order placement response: {result}")
+                
+                # Extract the correct order ID
+                order_id = result.get('id')
+                if order_id is None:
+                    raise Exception("No order ID found in response")
+                
+                # Return a clean result with the correct order ID
+                clean_result = {
+                    'id': order_id,
+                    'side': result.get('side'),
+                    'size': result.get('size'),
+                    'limit_price': result.get('limit_price'),
+                    'state': result.get('state'),
+                    'product_symbol': result.get('product_symbol'),
+                    'bracket_stop_loss_price': result.get('bracket_stop_loss_price'),
+                    'bracket_take_profit_price': result.get('bracket_take_profit_price'),
+                    'created_at': result.get('created_at'),
+                    'average_fill_price': result.get('average_fill_price')
+                }
+                
+                return clean_result
+                
+            except requests.exceptions.Timeout as e:
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                else:
+                    raise Exception(f"Order placement timed out after {max_retries} attempts")
+            except requests.exceptions.HTTPError as e:
+                raise
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                else:
+                    raise
 
     def get_live_orders(self):
-        """
-        Get all live orders
-        """
+        """Get live orders using ORIGINAL parameters (trading operations)"""
         path = "/v2/orders"
         headers, timestamp, message, signature = self.sign_request("GET", path)
         r = self.session.get(BASE_URL + path, headers=headers, timeout=10)
@@ -249,66 +240,163 @@ class DeltaAPI:
             raise Exception("Failed to get live orders")
 
     def cancel_order(self, order_id):
-        """
-        Cancel a specific order by ID
-        """
-        path = f"/v2/orders/{order_id}/cancel"
-        headers, timestamp, message, signature = self.sign_request("POST", path)
-        r = self.session.post(BASE_URL + path, headers=headers, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        if data.get("success"):
-            return data['result']
-        else:
-            raise Exception(f"Failed to cancel order {order_id}")
+        """Cancel a specific order using ORIGINAL parameters (trading operations)"""
+        try:
+            path = f"/v2/orders/{order_id}/cancel"
+            headers, timestamp, message, signature = self.sign_request("POST", path)
+            r = self.session.post(BASE_URL + path, headers=headers, timeout=10)
+            
+            # Handle 404 errors gracefully (order already cancelled or doesn't exist)
+            if r.status_code == 404:
+                return {"id": order_id, "status": "already_cancelled"}
+            
+            r.raise_for_status()
+            data = r.json()
+            if data.get("success"):
+                return data['result']
+            else:
+                raise Exception("Failed to cancel order")
+        except Exception as e:
+            # Re-raise the exception with more context
+            raise Exception(f"Failed to cancel order {order_id}: {e}")
 
     def cancel_all_orders(self):
-        """
-        Cancel all open orders - optimized for speed while maintaining safety
-        """
+        """Cancel all orders using the legacy method (individual cancellation)"""
         try:
             live_orders = self.get_live_orders()
-            open_orders = [order for order in live_orders if order.get('state') in ['open', 'pending']]
-            
-            if not open_orders:
-                print("   ℹ️  No open orders to cancel")
+            active_orders = [order for order in live_orders if order.get('state') not in ['filled', 'cancelled', 'rejected']]
+            if not active_orders:
                 return True
             
-            print(f"   📋 Found {len(open_orders)} open orders to cancel")
             cancelled_count = 0
+            failed_count = 0
             
-            # Use ThreadPoolExecutor for parallel cancellation
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                future_to_order = {
-                    executor.submit(self.cancel_order, order['id']): order 
-                    for order in open_orders
-                }
-                
-                for future in concurrent.futures.as_completed(future_to_order):
-                    order = future_to_order[future]
-                    try:
-                        result = future.result(timeout=5)
+            for order in active_orders:
+                try:
+                    order_id = order['id']
+                    result = self.cancel_order(order_id)
+                    
+                    if result and (isinstance(result, dict) and result.get('id')):
                         cancelled_count += 1
-                        print(f"   ✅ Cancelled order {order['id']}")
-                    except Exception as e:
-                        print(f"   ❌ Failed to cancel order {order['id']}: {e}")
+                    else:
+                        failed_count += 1
+                        
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    failed_count += 1
             
-            if cancelled_count == len(open_orders):
-                print(f"   ✅ Successfully cancelled all {cancelled_count} orders")
-                return True
-            else:
-                print(f"   ⚠️  Cancelled {cancelled_count}/{len(open_orders)} orders")
-                print(f"   ⚠️  {len(open_orders) - cancelled_count} orders require manual cancellation")
-                return False
-                
+            return cancelled_count > 0
         except Exception as e:
-            print(f"   ❌ Error getting live orders: {e}")
             return False
 
+    def cancel_all_orders_by_product(self, product_id=None):
+        """
+        Cancel all open orders for a specific product ID using CancelAllFilterObject API
+        
+        Args:
+            product_id (int): The product ID to cancel orders for. If None, uses SYMBOL_ID from config
+            
+        Returns:
+            dict: Response with success status and details
+        """
+        if product_id is None:
+            from config import SYMBOL_ID
+            product_id = SYMBOL_ID
+        
+        try:
+            payload = {"product_id": product_id}
+            path = "/v2/orders/cancel_all"
+            headers, timestamp, message, signature = self.sign_request("POST", path, payload)
+            
+            r = self.session.post(BASE_URL + path, headers=headers, json=payload, timeout=15)
+            
+            if r.status_code == 404:
+                return {"success": True, "message": f"No orders found for product ID {product_id}"}
+            
+            r.raise_for_status()
+            data = r.json()
+            
+            if data.get("success"):
+                return {
+                    "success": True,
+                    "message": f"Successfully cancelled orders for product ID {product_id}",
+                    "result": data.get('result', {})
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"API call failed: {data.get('message', 'Unknown error')}",
+                    "result": data
+                }
+                
+        except requests.exceptions.HTTPError as e:
+            return {
+                "success": False,
+                "message": f"HTTP Error: {e}",
+                "result": None
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error: {e}",
+                "result": None
+            }
+
+    def cancel_all_orders_with_filter(self, product_id=None, side=None, order_type=None):
+        """
+        Cancel all orders with advanced filtering using CancelAllFilterObject API
+        
+        Args:
+            product_id (int): The product ID to cancel orders for
+            side (str): Order side filter ('buy' or 'sell')
+            order_type (str): Order type filter ('limit_order', 'market_order', etc.)
+            
+        Returns:
+            dict: Response with success status and details
+        """
+        if product_id is None:
+            from config import SYMBOL_ID
+            product_id = SYMBOL_ID
+        
+        try:
+            payload = {"product_id": product_id}
+            
+            if side:
+                payload["side"] = side
+            if order_type:
+                payload["order_type"] = order_type
+            
+            path = "/v2/orders/cancel_all"
+            headers, timestamp, message, signature = self.sign_request("POST", path, payload)
+            
+            r = self.session.post(BASE_URL + path, headers=headers, json=payload, timeout=15)
+            
+            r.raise_for_status()
+            data = r.json()
+            
+            if data.get("success"):
+                return {
+                    "success": True,
+                    "message": f"Successfully cancelled filtered orders for product ID {product_id}",
+                    "result": data.get('result', {})
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"API call failed: {data.get('message', 'Unknown error')}",
+                    "result": data
+                }
+                
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error: {e}",
+                "result": None
+            }
+
     def get_positions(self, product_id=84):
-        """
-        Get positions for a specific product
-        """
+        """Get positions using ORIGINAL parameters (trading operations)"""
         path = f"/v2/positions?product_id={product_id}"
         headers, timestamp, message, signature = self.sign_request("GET", path)
         r = self.session.get(BASE_URL + path, headers=headers, timeout=10)
@@ -320,94 +408,56 @@ class DeltaAPI:
             raise Exception("Failed to get positions")
 
     def close_all_positions(self, product_id=84):
-        """
-        Close all open positions for a specific product
-        """
+        """Close all positions using ORIGINAL parameters (trading operations)"""
         try:
-            # Get current positions
             positions = self.get_positions(product_id)
             if not positions:
-                print("   ℹ️  No positions to close")
                 return True
-            
-            # Handle single position object
             if isinstance(positions, dict):
                 positions = [positions]
-            
-            # Filter positions with non-zero size
             open_positions = []
             for pos in positions:
                 if isinstance(pos, dict) and float(pos.get('size', 0)) != 0:
                     open_positions.append(pos)
-            
             if not open_positions:
-                print("   ℹ️  No open positions to close")
                 return True
-            
-            print(f"   📋 Found {len(open_positions)} position(s) to close")
-            
-            # Use ThreadPoolExecutor for parallel position closing
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                 future_to_position = {}
                 for pos in open_positions:
                     size = float(pos.get('size', 0))
                     if size > 0:
                         side = 'sell'
-                        position_type = "LONG"
                     else:
                         side = 'buy'
-                        position_type = "SHORT"
-                    
                     close_size = abs(size)
-                    print(f"   📊 Closing {position_type} position: {side.upper()} {close_size} lots")
-                    
                     future = executor.submit(
                         self.place_order,
-                        'BTCUSD', side, close_size, 'market_order', None, None
+                        SYMBOL, side, close_size, 'market_order', None, None, None
                     )
                     future_to_position[future] = pos
-                
                 success_count = 0
                 for future in concurrent.futures.as_completed(future_to_position):
                     pos = future_to_position[future]
                     try:
                         result = future.result(timeout=10)
-                        print(f"   ✅ Position close order placed: {result.get('id')}")
                         success_count += 1
                     except Exception as e:
-                        print(f"   ❌ Failed to close position: {e}")
-            
-            if success_count == len(open_positions):
-                print(f"   ✅ Successfully closed all {success_count} positions")
-                return True
-            else:
-                print(f"   ⚠️  Closed {success_count}/{len(open_positions)} positions")
-                return False
-                
+                        pass
+            return success_count == len(open_positions)
         except Exception as e:
-            print(f"   ❌ Error closing positions: {e}")
             return False
 
-    def close_position(self, product_id=84, size=None):
-        """
-        Close a specific position size (legacy method - use close_all_positions instead)
-        """
-        return self.close_all_positions(product_id)
-
     def get_account_state(self, product_id=84):
-        """
-        Optimized account state fetching with parallel operations
-        """
+        """Get account state using ORIGINAL parameters (trading operations)"""
         try:
-            # Use ThreadPoolExecutor for parallel API calls
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 orders_future = executor.submit(self.get_live_orders)
                 positions_future = executor.submit(self.get_positions, product_id)
-                
-                orders = orders_future.result(timeout=10)
-                positions = positions_future.result(timeout=10)
+                orders = orders_future.result(timeout=20)  # Increased timeout
+                positions = positions_future.result(timeout=20)  # Increased timeout
             
-            open_orders = [order for order in orders if order.get('state') in ['open', 'pending']]
+            # Check for any orders that are not in 'filled' or 'cancelled' state
+            active_orders = [order for order in orders if order.get('state') not in ['filled', 'cancelled', 'rejected']]
             
             if positions:
                 if isinstance(positions, dict):
@@ -417,14 +467,13 @@ class DeltaAPI:
                 open_positions = []
             
             return {
-                'orders': open_orders,
+                'orders': active_orders,
                 'positions': open_positions,
-                'has_orders': len(open_orders) > 0,
+                'has_orders': len(active_orders) > 0,
                 'has_positions': len(open_positions) > 0,
-                'is_clean': len(open_orders) == 0 and len(open_positions) == 0
+                'is_clean': len(active_orders) == 0 and len(open_positions) == 0
             }
         except Exception as e:
-            print(f"Error getting account state: {e}")
             return {
                 'orders': [],
                 'positions': [],
@@ -435,7 +484,8 @@ class DeltaAPI:
             }
 
     def get_all_products(self):
-        url = f"{BASE_URL}/v2/products"
+        """Get all products using LIVE parameters (market data)"""
+        url = f"{LIVE_BASE_URL}/v2/products"
         r = self.session.get(url, timeout=10)
         r.raise_for_status()
         data = r.json()
@@ -445,7 +495,6 @@ class DeltaAPI:
             raise Exception("Failed to get products")
 
     def clear_cache(self):
-        """Clear all caches"""
         with self._cache_lock:
             self._balance_cache = None
             self._balance_cache_time = 0
@@ -453,23 +502,32 @@ class DeltaAPI:
             self._price_cache_time = 0
 
     def __del__(self):
-        """Cleanup session"""
         if hasattr(self, 'session'):
             self.session.close()
 
     def edit_bracket_order(self, order_id, stop_loss=None, take_profit=None):
-        """
-        Edit the stop loss and/or take profit of an existing bracket order.
-        """
-        path = f"/v2/orders/{order_id}/edit_bracket"
-        data = {}
-        if stop_loss is not None:
-            data["bracket_stop_loss_price"] = stop_loss
-            data["bracket_stop_loss_limit_price"] = stop_loss
-        if take_profit is not None:
-            data["bracket_take_profit_price"] = take_profit
-            data["bracket_take_profit_limit_price"] = take_profit
-        headers, timestamp, message, signature = self.sign_request("POST", path, data)
-        r = self.session.post(BASE_URL + path, headers=headers, json=data, timeout=10)
-        r.raise_for_status()
-        return r.json()
+        """Edit bracket order using ORIGINAL parameters (trading operations)"""
+        try:
+            path = f"/v2/orders/{order_id}/edit_bracket"
+            body = {}
+            if stop_loss is not None:
+                body['stop_loss_price'] = stop_loss
+            if take_profit is not None:
+                body['take_profit_price'] = take_profit
+            
+            headers, timestamp, message, signature = self.sign_request("POST", path, body)
+            r = self.session.post(BASE_URL + path, headers=headers, json=body, timeout=10)
+            
+            # Handle 404 errors gracefully (order doesn't exist)
+            if r.status_code == 404:
+                raise Exception(f"Order {order_id} not found")
+            
+            r.raise_for_status()
+            data = r.json()
+            if data.get("success"):
+                return data['result']
+            else:
+                raise Exception("Failed to edit bracket order")
+        except Exception as e:
+            # Re-raise the exception with more context
+            raise Exception(f"Failed to edit bracket order {order_id}: {e}")
