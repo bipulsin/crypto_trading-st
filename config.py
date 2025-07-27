@@ -9,8 +9,8 @@ TRADING_FROM_LIVE = False
 
 # Live market data API parameters (for non-order related calls)
 LIVE_BASE_URL = 'https://api.india.delta.exchange' 
-LIVE_API_KEY = 'rNAuWihCMvnPLkIJSOEf3IThbQDhNJ' 
-LIVE_API_SECRET = 'tsy1vGOYVu8BySBf3n8GIMJtns47Ca0Jq4444nQqjL61EyLWqjm4kqRFvUTJ'  
+LIVE_API_KEY = 'Fp0bn5wr4qZ1A1AHz17NdVf8Pxp8Ct' 
+LIVE_API_SECRET = 'SAsjx9iewya4yvLO5e3L7uKwVNOBQ7ernVhkMOU6BUaErxWNFLmE8m8ZLIiq'  
 LIVE_SYMBOL_ID = 27 
 
 if TRADING_FROM_LIVE:
@@ -33,11 +33,6 @@ SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3
 ASSET_ID = 3
 
-# Live market data API parameters (for non-order related calls)
-LIVE_BASE_URL = 'https://api.india.delta.exchange'  # Currently same as BASE_URL
-LIVE_API_KEY = 'rNAuWihCMvnPLkIJSOEf3IThbQDhNJ'    # Currently same as API_KEY
-LIVE_API_SECRET = 'tsy1vGOYVu8BySBf3n8GIMJtns47Ca0Jq4444nQqjL61EyLWqjm4kqRFvUTJ'  # Currently same as API_SECRET
-LIVE_SYMBOL_ID = 27    # Currently same as SYMBOL_ID
 
 # Order management configuration
 RESPECT_EXISTING_ORDERS = True  # Set to False to cancel existing orders on startup
@@ -82,5 +77,5 @@ PERFORMANCE_WARNING_THRESHOLD = 2.0  # Warning threshold for execution time (sec
 # Trading timing and execution logic
 ENABLE_CONTINUOUS_MONITORING = True  # Enable continuous position/order monitoring
 ENABLE_CANDLE_CLOSE_ENTRIES = True  # Only place new orders at candle close
-MONITORING_INTERVAL = 30  # Seconds between monitoring checks (when not at candle close)
+MONITORING_INTERVAL = 60  # Seconds between monitoring checks (when not at candle close)
 CANDLE_CLOSE_BUFFER = 10  # Seconds buffer before candle close to prepare for entry
