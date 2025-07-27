@@ -78,3 +78,9 @@ POSITION_VERIFICATION_DELAY = 2  # Seconds to wait before verifying position clo
 MAX_ORDER_PLACEMENT_TIME = 2.0  # Maximum acceptable order placement time (seconds)
 MAX_TOTAL_EXECUTION_TIME = 5.0  # Maximum acceptable total trade execution time (seconds)
 PERFORMANCE_WARNING_THRESHOLD = 2.0  # Warning threshold for execution time (seconds)
+
+# Trading timing and execution logic
+ENABLE_CONTINUOUS_MONITORING = True  # Enable continuous position/order monitoring
+ENABLE_CANDLE_CLOSE_ENTRIES = True  # Only place new orders at candle close
+MONITORING_INTERVAL = 30  # Seconds between monitoring checks (when not at candle close)
+CANDLE_CLOSE_BUFFER = 10  # Seconds buffer before candle close to prepare for entry

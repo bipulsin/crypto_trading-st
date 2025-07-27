@@ -147,6 +147,20 @@ This workspace is specifically configured for **paper trading** - a risk-free en
 - **Resource Management**: Efficient API usage and caching
 - **Error Recovery**: Graceful handling of API failures and network issues
 
+### **⏰ TIMING & EXECUTION PHASE**
+
+#### **Step 13: Continuous Monitoring**
+- **Real-Time Monitoring**: Continuous position and order monitoring every 30 seconds
+- **Immediate Closure**: Close positions immediately when SuperTrend direction changes
+- **Stop-Loss Updates**: Real-time stop-loss updates based on latest SuperTrend values
+- **Order Validation**: Continuous validation of existing orders against current strategy
+
+#### **Step 14: Candle-Close Entry Logic**
+- **Disciplined Entry**: Only place new orders at 5-minute candle close
+- **Signal Confirmation**: Confirm trading signals at candle close for better accuracy
+- **Entry Timing**: Align new position entries with candle boundaries
+- **Risk Management**: Maintain stop-loss and take-profit discipline at entry
+
 ---
 
 ## ⚙️ Configuration
@@ -178,6 +192,14 @@ This workspace is specifically configured for **paper trading** - a risk-free en
 | `ORDER_VERIFICATION_TIMEOUT` | 10 | Timeout for verification operations |
 | `MAX_ORDER_PLACEMENT_TIME` | 2.0 | Maximum acceptable order placement time |
 | `MAX_TOTAL_EXECUTION_TIME` | 5.0 | Maximum acceptable total execution time |
+
+### **Trading Timing & Execution Logic**
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `ENABLE_CONTINUOUS_MONITORING` | True | Enable continuous position/order monitoring |
+| `ENABLE_CANDLE_CLOSE_ENTRIES` | True | Only place new orders at candle close |
+| `MONITORING_INTERVAL` | 30 | Seconds between monitoring checks |
+| `CANDLE_CLOSE_BUFFER` | 10 | Seconds buffer before candle close |
 
 ---
 
@@ -227,6 +249,12 @@ DELTA_API_SECRET_TEST=your_testnet_api_secret
 - **Position Validation**: Real-time position verification
 - **Performance Metrics**: Detailed execution time analysis
 - **Error Logging**: Comprehensive error tracking and reporting
+
+### **⏰ Advanced Timing & Execution**
+- **Continuous Monitoring**: Real-time position and order monitoring every 30 seconds
+- **Immediate Closure**: Close positions immediately when conditions are met
+- **Candle-Close Entries**: Only place new orders at 5-minute candle close
+- **Disciplined Timing**: Align trading operations with market timing
 
 ---
 

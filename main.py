@@ -7,7 +7,8 @@ from config import (SYMBOL, CANDLE_INTERVAL, SUPERTREND_PERIOD, SUPERTREND_MULTI
                    DEFAULT_CAPITAL, MAX_ITERATION_TIME, PENDING_ORDER_MAX_ITERATIONS, 
                    CANDLE_FALLBACK_ENABLED, ORDER_PRICE_OFFSET, TAKE_PROFIT_MULTIPLIER,
                    CANCELLATION_VERIFICATION_ENABLED, CANCELLATION_VERIFICATION_ATTEMPTS,
-                   CANCELLATION_WAIT_TIME, VERIFICATION_WAIT_TIME)
+                   CANCELLATION_WAIT_TIME, VERIFICATION_WAIT_TIME, ENABLE_CONTINUOUS_MONITORING,
+                   ENABLE_CANDLE_CLOSE_ENTRIES, MONITORING_INTERVAL)
 import datetime
 import logging
 import concurrent.futures
@@ -713,40 +714,157 @@ def initialize_order_tracking():
         return False
 
 def get_current_order_id():
-    """Retrieve the current order ID from the exchange as a fallback"""
+    """Get the most recent order ID from the exchange"""
     try:
-        # First check for open orders
         live_orders = api.get_live_orders()
-        open_orders = [order for order in live_orders if order.get('state') in ['open', 'pending']]
-        if open_orders:
-            # Sort by creation time to get the most recent order
-            open_orders.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-            order_id = open_orders[0].get('id')
-            log(f"🔄 Retrieved open order ID from exchange: {order_id}")
-            log(f"   Found {len(open_orders)} open orders, using most recent")
-            return order_id
-        
-        # If no open orders, check for filled orders (for existing positions)
-        filled_orders = [order for order in live_orders if order.get('state') in ['filled', 'closed']]
-        if filled_orders:
-            # Sort by creation time to get the most recent filled order
-            filled_orders.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-            order_id = filled_orders[0].get('id')
-            log(f"🔄 Retrieved filled order ID from exchange: {order_id}")
-            log(f"   Found {len(filled_orders)} filled orders, using most recent")
-            return order_id
-        
-        log("🔄 No orders found in exchange")
+        if live_orders:
+            # Sort by creation time and get the most recent
+            sorted_orders = sorted(live_orders, key=lambda x: x.get('created_at', ''), reverse=True)
+            return sorted_orders[0].get('id')
         return None
     except Exception as e:
-        log(f"❌ Error retrieving current order ID: {e}")
+        log(f"❌ Error getting current order ID: {e}")
         return None
+
+def is_candle_close_approaching():
+    """Check if we're approaching a candle close (within buffer time)"""
+    from config import CANDLE_INTERVAL, CANDLE_CLOSE_BUFFER
+    
+    now = datetime.datetime.now()
+    seconds_until_close = (CANDLE_INTERVAL * 60) - (now.minute * 60 + now.second) % (CANDLE_INTERVAL * 60)
+    return seconds_until_close <= CANDLE_CLOSE_BUFFER
+
+def is_candle_close():
+    """Check if we're at the exact candle close time"""
+    from config import CANDLE_INTERVAL
+    
+    now = datetime.datetime.now()
+    return now.minute % CANDLE_INTERVAL == 0 and now.second == 0
+
+def continuous_monitoring_cycle():
+    """Continuous monitoring cycle for immediate position/order closure"""
+    from config import MAX_CLOSE_RETRIES, RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY
+    global last_order_id, prev_supertrend_signal
+    
+    if not ENABLE_CONTINUOUS_MONITORING:
+        return
+    
+    try:
+        # Get current market data for monitoring
+        candles = fetch_candles_optimized()
+        if candles is None or candles.empty:
+            return
+            
+        candles = calculate_supertrend_optimized(candles)
+        if candles is None:
+            return
+            
+        # Get current signals
+        if len(candles) < 2:
+            return
+            
+        last_signal = int(candles.iloc[-1]['supertrend_signal'])
+        prev_signal = int(candles.iloc[-2]['supertrend_signal']) if len(candles) > 1 else last_signal
+        
+        # Get account state
+        try:
+            state = api.get_account_state(product_id=84)
+            has_position = state['has_positions']
+            has_order = state['has_orders']
+        except Exception as e:
+            log(f"❌ Error getting account state in monitoring: {e}")
+            return
+        
+        # Check for position closure conditions
+        if has_position:
+            # Check if SuperTrend direction changed (immediate closure)
+            if prev_supertrend_signal is not None and last_signal != prev_supertrend_signal:
+                log("🚨 SuperTrend direction changed - IMMEDIATE POSITION CLOSURE")
+                try:
+                    # Enhanced position closing with retry mechanism
+                    log("🔄 Closing positions with retry mechanism...")
+                    close_success = False
+                    
+                    for attempt in range(MAX_CLOSE_RETRIES):
+                        try:
+                            close_result = api.close_all_positions(84)
+                            if close_result:
+                                close_success = True
+                                log(f"✅ Position closing successful on attempt {attempt + 1}")
+                                break
+                            else:
+                                log(f"⚠️ Position closing attempt {attempt + 1} failed, retrying...")
+                                time.sleep(RETRY_WAIT_TIME)
+                        except Exception as close_error:
+                            log(f"❌ Position closing attempt {attempt + 1} error: {close_error}")
+                            if attempt < MAX_CLOSE_RETRIES - 1:
+                                time.sleep(RETRY_WAIT_TIME)
+                    
+                    if not close_success:
+                        log("❌ Critical Error: Could not close positions after all retries")
+                        log("   Manual intervention may be required to close positions on the platform")
+                    
+                    # Verify position closure
+                    try:
+                        time.sleep(POSITION_VERIFICATION_DELAY)
+                        state = api.get_account_state(product_id=84)
+                        if state.get('has_positions', True):
+                            log("⚠️ Warning: Positions may still exist after closure attempt")
+                        else:
+                            log("✅ Position closure verified successfully")
+                    except Exception as verify_error:
+                        log(f"⚠️ Could not verify position closure: {verify_error}")
+                        
+                except Exception as e:
+                    log(f"❌ Error in continuous monitoring position closure: {e}")
+            
+            # Update stop loss for existing positions
+            else:
+                latest_supertrend = candles.iloc[-1]['supertrend']
+                if last_order_id is not None:
+                    try:
+                        api.edit_bracket_order(order_id=last_order_id, stop_loss=latest_supertrend)
+                        log(f"📊 Updated stop loss to latest SuperTrend value: {latest_supertrend} for order {last_order_id}")
+                    except Exception as e:
+                        error_msg = str(e).lower()
+                        if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
+                            log(f"Order {last_order_id} no longer exists, resetting last_order_id")
+                            last_order_id = None
+                        else:
+                            log(f"Failed to update stop loss for order {last_order_id}: {e}")
+                else:
+                    # Try to retrieve order ID from exchange as fallback
+                    fallback_order_id = get_current_order_id()
+                    if fallback_order_id is not None:
+                        try:
+                            api.edit_bracket_order(order_id=fallback_order_id, stop_loss=latest_supertrend)
+                            log(f"📊 Updated stop loss using fallback order ID: {latest_supertrend} for order {fallback_order_id}")
+                            last_order_id = fallback_order_id
+                        except Exception as e:
+                            error_msg = str(e).lower()
+                            if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
+                                log(f"Fallback order {fallback_order_id} no longer exists")
+                                last_order_id = None
+                            else:
+                                log(f"Failed to update stop loss with fallback order ID {fallback_order_id}: {e}")
+        
+        # Check for order cancellation conditions (invalid orders)
+        if has_order:
+            # Validate existing orders against current strategy
+            current_capital = get_current_capital()
+            order_validation_success = validate_and_handle_existing_orders(candles, current_capital)
+            if not order_validation_success:
+                log("⚠️ Order validation failed in continuous monitoring")
+                
+    except Exception as e:
+        log(f"❌ Error in continuous monitoring cycle: {e}")
 
 def execute_trade_optimized(decision):
     """Execute trade with enhanced error handling, retry mechanisms, and performance logging"""
     from config import (MAX_CANCEL_RETRIES, MAX_CLOSE_RETRIES, RETRY_WAIT_TIME, 
                        ORDER_VERIFICATION_TIMEOUT, MAX_ORDER_PLACEMENT_TIME, 
                        MAX_TOTAL_EXECUTION_TIME, PERFORMANCE_WARNING_THRESHOLD)
+    global last_order_id
     
     if not decision or not decision['action']:
         return False
@@ -828,7 +946,6 @@ def execute_trade_optimized(decision):
             log(f"⚠️ Order placement exceeded {MAX_ORDER_PLACEMENT_TIME}s: {order_placement_time:.2f}s")
         
         # Step 4: Enhanced order ID extraction and verification
-        global last_order_id
         order_verification_start = time.time()
         
         if isinstance(result, dict) and 'id' in result:
@@ -949,7 +1066,6 @@ def execute_trade_optimized(decision):
             fallback_order_id = get_current_order_id()
             if fallback_order_id:
                 log(f"🔄 Fail-safe: Found order ID {fallback_order_id} - updating tracking")
-                global last_order_id
                 last_order_id = fallback_order_id
         except Exception as fallback_error:
             log(f"⚠️ Fail-safe order ID retrieval failed: {fallback_error}")
@@ -993,6 +1109,23 @@ while True:
     iteration_start = time.time()
     try:
         now = datetime.datetime.now().replace(second=0, microsecond=0)
+        
+        # Check if we're at candle close or approaching it
+        candle_close_approaching = is_candle_close_approaching()
+        at_candle_close = is_candle_close()
+        
+        # Always perform continuous monitoring for position/order closure
+        if ENABLE_CONTINUOUS_MONITORING:
+            continuous_monitoring_cycle()
+        
+        # Only proceed with full trading logic at candle close
+        if not at_candle_close and ENABLE_CANDLE_CLOSE_ENTRIES:
+            # Wait for next monitoring cycle
+            time.sleep(MONITORING_INTERVAL)
+            continue
+        
+        # Full trading logic - only executed at candle close
+        log("🕐 Candle close detected - executing full trading logic")
         
         # Fetch and validate candle data
         candles = fetch_candles_optimized()
@@ -1048,110 +1181,55 @@ while True:
             time.sleep(30)
             continue
             
-        # Main trading logic
+        # Main trading logic - only for new order placement at candle close
         if has_position:
-            if prev_supertrend_signal is not None and last_signal != prev_supertrend_signal:
-                log("SuperTrend direction changed. Closing current position and opening new one.")
+            # Position already exists - no new order needed
+            log("📊 Position exists - no new order placement needed at candle close")
+            latest_supertrend = candles.iloc[-1]['supertrend']
+            if last_order_id is not None:
                 try:
-                    # Enhanced position closing with retry mechanism
-                    log("🔄 Closing positions with retry mechanism...")
-                    from config import MAX_CLOSE_RETRIES, RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY
-                    close_success = False
-                    
-                    for attempt in range(MAX_CLOSE_RETRIES):
-                        try:
-                            close_result = api.close_all_positions(84)
-                            if close_result:
-                                close_success = True
-                                log(f"✅ Position closing successful on attempt {attempt + 1}")
-                                break
-                            else:
-                                log(f"⚠️ Position closing attempt {attempt + 1} failed, retrying...")
-                                time.sleep(RETRY_WAIT_TIME)
-                        except Exception as close_error:
-                            log(f"❌ Position closing attempt {attempt + 1} error: {close_error}")
-                            if attempt < MAX_CLOSE_RETRIES - 1:
-                                time.sleep(RETRY_WAIT_TIME)
-                    
-                    if not close_success:
-                        log("❌ Critical Error: Could not close positions after all retries")
-                        log("   Manual intervention may be required to close positions on the platform")
-                        # Continue with trading logic anyway, but log the issue
-                    
-                    # Verify position closure
-                    try:
-                        time.sleep(POSITION_VERIFICATION_DELAY)  # Wait for position closure to process
-                        state = api.get_account_state(product_id=84)
-                        if state.get('has_positions', True):
-                            log("⚠️ Warning: Positions may still exist after closure attempt")
-                        else:
-                            log("✅ Position closure verified successfully")
-                    except Exception as verify_error:
-                        log(f"⚠️ Could not verify position closure: {verify_error}")
-                    
-                    # Place new order
-                    decision = run_strategy_optimized(candles, capital)
-                    if decision and decision['action']:
-                        execute_trade_optimized(decision)
-                        pending_order_iterations = 0
+                    api.edit_bracket_order(order_id=last_order_id, stop_loss=latest_supertrend)
+                    log(f"Updated stop loss to latest SuperTrend value: {latest_supertrend} for order {last_order_id}")
                 except Exception as e:
-                    log(f"❌ Error handling SuperTrend change: {e}")
-                    # Fail-safe: Try to continue with trading logic
-                    try:
-                        decision = run_strategy_optimized(candles, capital)
-                        if decision and decision['action']:
-                            log("🔄 Attempting to place new order despite position closure error...")
-                            execute_trade_optimized(decision)
-                            pending_order_iterations = 0
-                    except Exception as fallback_error:
-                        log(f"❌ Fallback order placement also failed: {fallback_error}")
+                    error_msg = str(e).lower()
+                    if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
+                        log(f"Order {last_order_id} no longer exists, resetting last_order_id")
+                        last_order_id = None
+                    else:
+                        log(f"Failed to update stop loss for order {last_order_id}: {e}")
             else:
-                latest_supertrend = candles.iloc[-1]['supertrend']
-                if last_order_id is not None:
+                # Try to retrieve order ID from exchange as fallback
+                fallback_order_id = get_current_order_id()
+                if fallback_order_id is not None:
                     try:
-                        api.edit_bracket_order(order_id=last_order_id, stop_loss=latest_supertrend)
-                        log(f"Updated stop loss to latest SuperTrend value: {latest_supertrend} for order {last_order_id}")
+                        api.edit_bracket_order(order_id=fallback_order_id, stop_loss=latest_supertrend)
+                        log(f"Updated stop loss using fallback order ID: {latest_supertrend} for order {fallback_order_id}")
+                        last_order_id = fallback_order_id  # Update our tracking
                     except Exception as e:
                         error_msg = str(e).lower()
                         if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
-                            log(f"Order {last_order_id} no longer exists, resetting last_order_id")
+                            log(f"Fallback order {fallback_order_id} no longer exists")
                             last_order_id = None
                         else:
-                            log(f"Failed to update stop loss for order {last_order_id}: {e}")
+                            log(f"Failed to update stop loss with fallback order ID {fallback_order_id}: {e}")
                 else:
-                    # Try to retrieve order ID from exchange as fallback
-                    fallback_order_id = get_current_order_id()
-                    if fallback_order_id is not None:
-                        try:
-                            api.edit_bracket_order(order_id=fallback_order_id, stop_loss=latest_supertrend)
-                            log(f"Updated stop loss using fallback order ID: {latest_supertrend} for order {fallback_order_id}")
-                            last_order_id = fallback_order_id  # Update our tracking
-                        except Exception as e:
-                            error_msg = str(e).lower()
-                            if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
-                                log(f"Fallback order {fallback_order_id} no longer exists")
-                                last_order_id = None
-                            else:
-                                log(f"Failed to update stop loss with fallback order ID {fallback_order_id}: {e}")
-                    else:
-                        log(f"No last_order_id available to update stop loss.")
-                prev_supertrend_signal = last_signal
-                time.sleep(CANDLE_INTERVAL * 60)
-                continue
+                    log(f"No last_order_id available to update stop loss.")
         elif not has_order:
-            log("No active order. Placing new order based on SuperTrend signal.")
+            log("🎯 No active position or order - placing new order at candle close.")
             try:
                 decision = run_strategy_optimized(candles, capital)
                 if decision and decision['action']:
                     execute_trade_optimized(decision)
                     pending_order_iterations = 0
+                else:
+                    log("📊 No trading signal at candle close - no order placed")
             except Exception as e:
-                log(f"❌ Error placing new order: {e}")
+                log(f"❌ Error placing new order at candle close: {e}")
         else:
             pending_order_iterations += 1
-            log(f"Pending order detected. Iteration count: {pending_order_iterations}")
+            log(f"📊 Pending order detected at candle close. Iteration count: {pending_order_iterations}")
             if pending_order_iterations >= PENDING_ORDER_MAX_ITERATIONS:
-                log("Pending order not filled after multiple iterations. Force cancelling and placing new order.")
+                log("🔄 Pending order not filled after multiple iterations. Force cancelling and placing new order.")
                 try:
                     # Force cancel all orders with retry mechanism
                     cancel_success = force_cancel_pending_orders()
@@ -1176,13 +1254,17 @@ while True:
                 except Exception as e:
                     log(f"❌ Error handling pending order timeout: {e}")
                     pending_order_iterations = 0  # Reset counter to avoid infinite loop
+            else:
+                log("⏳ Pending order still within acceptable iterations - continuing to wait")
                     
         prev_supertrend_signal = last_signal
         iteration_time = time.time() - iteration_start
         if iteration_time > MAX_ITERATION_TIME:
             log(f"⚠️  Slow iteration: {iteration_time:.2f}s")
         now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log(f'Waiting for next candle... ({now_str}) - Iteration time: {iteration_time:.2f}s')
+        log(f'✅ Candle close processing completed - Waiting for next candle... ({now_str}) - Iteration time: {iteration_time:.2f}s')
+        
+        # Wait for next candle close
         time.sleep(CANDLE_INTERVAL * 60)
     except Exception as e:
         log(f"❌ Critical error in main loop: {e}")
