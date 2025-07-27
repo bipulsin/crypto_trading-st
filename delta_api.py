@@ -506,28 +506,38 @@ class DeltaAPI:
             self.session.close()
 
     def edit_bracket_order(self, order_id, stop_loss=None, take_profit=None):
-        """Edit bracket order using ORIGINAL parameters (trading operations)"""
+        """Edit bracket order stop loss and take profit"""
         try:
-            path = f"/v2/orders/{order_id}/edit_bracket"
+            url = f"{BASE_URL}/v2/orders/{order_id}"
             body = {}
             if stop_loss is not None:
-                body['stop_loss_price'] = stop_loss
+                body['stop_loss'] = stop_loss
             if take_profit is not None:
-                body['take_profit_price'] = take_profit
+                body['take_profit'] = take_profit
             
-            headers, timestamp, message, signature = self.sign_request("POST", path, body)
-            r = self.session.post(BASE_URL + path, headers=headers, json=body, timeout=10)
-            
-            # Handle 404 errors gracefully (order doesn't exist)
-            if r.status_code == 404:
-                raise Exception(f"Order {order_id} not found")
-            
+            if not body:
+                return True  # Nothing to update
+                
+            headers = self.sign_request('PUT', f'/v2/orders/{order_id}', body)
+            r = self.session.put(url, headers=headers, json=body, timeout=10)
             r.raise_for_status()
             data = r.json()
-            if data.get("success"):
+            return data.get('success', False)
+        except Exception as e:
+            return False
+
+    def get_order_status(self, order_id):
+        """Get detailed status of a specific order"""
+        try:
+            url = f"{BASE_URL}/v2/orders/{order_id}"
+            headers = self.sign_request('GET', f'/v2/orders/{order_id}')
+            r = self.session.get(url, headers=headers, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            
+            if data.get('success') and data.get('result'):
                 return data['result']
             else:
-                raise Exception("Failed to edit bracket order")
+                return None
         except Exception as e:
-            # Re-raise the exception with more context
-            raise Exception(f"Failed to edit bracket order {order_id}: {e}")
+            return None

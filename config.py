@@ -5,11 +5,28 @@ try:
 except ImportError:
     pass
 
-BASE_URL = 'https://cdn-ind.testnet.deltaex.org'
-API_KEY = os.getenv('DELTA_API_KEY_TEST', 'Dif1lSZl16ibEVhqKboD1UkQ5Z4qD7')
-API_SECRET = os.getenv('DELTA_API_SECRET_TEST', 'kjDLM1vF5GI8THQylfIBRyMmfrL3pkheUomTBmJLCVJHwVCz0Fuk5KCA5WYH')
+TRADING_FROM_LIVE = False
+
+# Live market data API parameters (for non-order related calls)
+LIVE_BASE_URL = 'https://api.india.delta.exchange' 
+LIVE_API_KEY = 'rNAuWihCMvnPLkIJSOEf3IThbQDhNJ' 
+LIVE_API_SECRET = 'tsy1vGOYVu8BySBf3n8GIMJtns47Ca0Jq4444nQqjL61EyLWqjm4kqRFvUTJ'  
+LIVE_SYMBOL_ID = 27 
+
+if TRADING_FROM_LIVE:
+    BASE_URL = LIVE_BASE_URL
+    API_KEY = LIVE_API_KEY
+    API_SECRET = LIVE_API_SECRET
+    SYMBOL_ID = LIVE_SYMBOL_ID
+else:
+    BASE_URL = 'https://cdn-ind.testnet.deltaex.org'
+    API_KEY = os.getenv('DELTA_API_KEY_TEST', 'Dif1lSZl16ibEVhqKboD1UkQ5Z4qD7')
+    API_SECRET = os.getenv('DELTA_API_SECRET_TEST', 'kjDLM1vF5GI8THQylfIBRyMmfrL3pkheUomTBmJLCVJHwVCz0Fuk5KCA5WYH')
+    SYMBOL_ID = 84
+
 SYMBOL = 'BTCUSD'
-SYMBOL_ID = 84
+
+
 CAPITAL_MODE = '100%'
 CANDLE_INTERVAL = 5
 SUPERTREND_PERIOD = 10
@@ -36,12 +53,12 @@ AUTO_CLOSE_INVALID_ORDERS = True  # Automatically close orders that violate trad
 DEFAULT_CAPITAL = 200  # Default capital if balance cannot be retrieved
 LEVERAGE = 50  # Leverage used for position sizing
 POSITION_SIZE_PERCENT = 0.5  # Percentage of balance to use for each trade
-TAKE_PROFIT_MULTIPLIER = 1.5  # Multiplier for take profit calculation
-ORDER_PRICE_OFFSET = 0  # Price offset for limit orders ($100 above/below market)
+TAKE_PROFIT_MULTIPLIER = 1.25  # Multiplier for take profit calculation
+ORDER_PRICE_OFFSET = 10  # Price offset for limit orders ($100 above/below market)
 
 # Performance and monitoring
 MAX_ITERATION_TIME = 2.0  # Maximum acceptable iteration time in seconds
-PENDING_ORDER_MAX_ITERATIONS = 4  # Maximum iterations to wait for pending orders
+PENDING_ORDER_MAX_ITERATIONS = 2  # Maximum iterations to wait for pending orders
 CANDLE_FALLBACK_ENABLED = True  # Enable Binance fallback for candle data
 
 # Order cancellation settings
@@ -49,3 +66,15 @@ CANCELLATION_VERIFICATION_ENABLED = True  # Enable verification after cancellati
 CANCELLATION_VERIFICATION_ATTEMPTS = 2  # Number of verification attempts
 CANCELLATION_WAIT_TIME = 3  # Seconds to wait between cancellation attempts
 VERIFICATION_WAIT_TIME = 2  # Seconds to wait between verification attempts
+
+# Enhanced error handling and retry settings
+MAX_CANCEL_RETRIES = 3  # Maximum retries for order cancellation
+MAX_CLOSE_RETRIES = 3  # Maximum retries for position closing
+RETRY_WAIT_TIME = 2  # Seconds to wait between retries
+ORDER_VERIFICATION_TIMEOUT = 10  # Timeout for order verification operations
+POSITION_VERIFICATION_DELAY = 2  # Seconds to wait before verifying position closure
+
+# Performance monitoring thresholds
+MAX_ORDER_PLACEMENT_TIME = 2.0  # Maximum acceptable order placement time (seconds)
+MAX_TOTAL_EXECUTION_TIME = 5.0  # Maximum acceptable total trade execution time (seconds)
+PERFORMANCE_WARNING_THRESHOLD = 2.0  # Warning threshold for execution time (seconds)

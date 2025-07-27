@@ -276,6 +276,7 @@ def validate_and_handle_existing_positions(candles, capital):
         
         invalid_positions = []
         valid_positions = []
+        open_positions = []  # Define open_positions list
         
         for pos_detail in position_details:
             position = pos_detail['position']
@@ -284,6 +285,9 @@ def validate_and_handle_existing_positions(candles, capital):
             
             if position_size == 0 or entry_price == 0:
                 continue
+                
+            # Add to open_positions list
+            open_positions.append(position)
                 
             # Determine position side
             position_side = pos_detail['side']
@@ -739,29 +743,73 @@ def get_current_order_id():
         return None
 
 def execute_trade_optimized(decision):
+    """Execute trade with enhanced error handling, retry mechanisms, and performance logging"""
+    from config import (MAX_CANCEL_RETRIES, MAX_CLOSE_RETRIES, RETRY_WAIT_TIME, 
+                       ORDER_VERIFICATION_TIMEOUT, MAX_ORDER_PLACEMENT_TIME, 
+                       MAX_TOTAL_EXECUTION_TIME, PERFORMANCE_WARNING_THRESHOLD)
+    
     if not decision or not decision['action']:
         return False
+    
     log(f"🚀 Trade triggered: {decision['action']} {decision['side']} {decision['qty']} at Price: ${decision['price']:.2f} -- Stop-Loss at {decision['stop_loss']}")
+    
+    # Performance tracking
+    start_time = time.time()
+    order_placement_time = None
+    order_verification_time = None
+    
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            cancel_future = executor.submit(api.cancel_all_orders)
-            close_future = executor.submit(api.close_all_positions, 84)
-            cancel_success = cancel_future.result(timeout=5)
-            close_success = close_future.result(timeout=5)
-            if not cancel_success:
-                log("❌ Critical Error: Could not cancel orders")
-                return False
-            if not close_success:
-                log("❌ Critical Error: Could not close positions")
-                return False
-            api_side = 'buy' if decision['side'] == 'LONG' else 'sell'
-            take_profit = decision['price'] + ((decision['price'] - decision['stop_loss']) * TAKE_PROFIT_MULTIPLIER)
+        # Step 1: Cancel existing orders and close positions with retry mechanism
+        log("🔄 Step 1: Cancelling existing orders and closing positions...")
+        cancel_start = time.time()
+        
+        # Retry mechanism for cancellation
+        cancel_success = False
+        
+        for attempt in range(MAX_CANCEL_RETRIES):
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                    cancel_future = executor.submit(api.cancel_all_orders)
+                    close_future = executor.submit(api.close_all_positions, 84)
+                    
+                    cancel_result = cancel_future.result(timeout=ORDER_VERIFICATION_TIMEOUT)
+                    close_result = close_future.result(timeout=ORDER_VERIFICATION_TIMEOUT)
+                    
+                    if cancel_result and close_result:
+                        cancel_success = True
+                        log(f"✅ Cancellation successful on attempt {attempt + 1}")
+                        break
+                    else:
+                        log(f"⚠️ Cancellation attempt {attempt + 1} failed, retrying...")
+                        time.sleep(RETRY_WAIT_TIME)
+                        
+            except Exception as e:
+                log(f"❌ Cancellation attempt {attempt + 1} error: {e}")
+                if attempt < MAX_CANCEL_RETRIES - 1:
+                    time.sleep(RETRY_WAIT_TIME)
+        
+        if not cancel_success:
+            log("❌ Critical Error: Could not cancel orders after all retries")
+            return False
+            
+        cancel_time = time.time() - cancel_start
+        log(f"⏱️ Cancellation completed in {cancel_time:.2f}s")
+        
+        # Step 2: Calculate order parameters
+        api_side = 'buy' if decision['side'] == 'LONG' else 'sell'
+        take_profit = decision['price'] + ((decision['price'] - decision['stop_loss']) * TAKE_PROFIT_MULTIPLIER)
+        
         if api_side == 'buy':
             order_price = decision['price'] + ORDER_PRICE_OFFSET
         else:
             order_price = decision['price'] - ORDER_PRICE_OFFSET
+            
         post_only = False
-        start_order_time = time.time()
+        
+        # Step 3: Place order with enhanced logging
+        log("🔄 Step 2: Placing new order...")
+        order_start = time.time()
+        
         result = api.place_order(
             symbol=SYMBOL,
             side=api_side,
@@ -771,33 +819,141 @@ def execute_trade_optimized(decision):
             take_profit=take_profit,
             post_only=post_only
         )
+        
+        order_placement_time = time.time() - order_start
+        log(f"⏱️ Order placement completed in {order_placement_time:.2f}s")
+        
+        # Check order placement performance
+        if order_placement_time > MAX_ORDER_PLACEMENT_TIME:
+            log(f"⚠️ Order placement exceeded {MAX_ORDER_PLACEMENT_TIME}s: {order_placement_time:.2f}s")
+        
+        # Step 4: Enhanced order ID extraction and verification
         global last_order_id
-        # Enhanced order ID extraction with verification
+        order_verification_start = time.time()
+        
         if isinstance(result, dict) and 'id' in result:
             last_order_id = result['id']
             log(f"📝 Order ID captured: {last_order_id}")
             
-            # Verify the order ID on the exchange
+            # Enhanced verification with multiple fallback methods
+            verification_success = False
+            
+            # Method 1: Direct verification
             log(f"🔍 Verifying order ID {last_order_id} on exchange...")
             if verify_order_id_match(last_order_id):
                 log(f"✅ Order ID {last_order_id} verified successfully")
+                verification_success = True
             else:
-                log(f"⚠️ Order ID {last_order_id} verification failed - checking for alternatives")
-                # Try to find the actual order on the exchange
+                log(f"⚠️ Order ID {last_order_id} verification failed - trying fallback methods")
+                
+                # Method 2: Get current order ID from exchange
                 fallback_order_id = get_current_order_id()
                 if fallback_order_id and fallback_order_id != last_order_id:
                     log(f"🔄 Using fallback order ID: {fallback_order_id} (original: {last_order_id})")
                     last_order_id = fallback_order_id
+                    
+                    # Verify the fallback order ID
+                    if verify_order_id_match(fallback_order_id):
+                        log(f"✅ Fallback order ID {fallback_order_id} verified successfully")
+                        verification_success = True
+                    else:
+                        log(f"⚠️ Fallback order ID {fallback_order_id} also failed verification")
+                
+                # Method 3: Check all live orders for matching parameters
+                if not verification_success:
+                    log("🔍 Checking all live orders for parameter match...")
+                    try:
+                        live_orders = api.get_live_orders()
+                        for order in live_orders:
+                            if (order.get('side', '').upper() == api_side.upper() and
+                                float(order.get('size', 0)) == decision['qty'] and
+                                abs(float(order.get('limit_price', 0)) - order_price) < 1.0):
+                                
+                                log(f"🔄 Found matching order by parameters: {order.get('id')}")
+                                last_order_id = order.get('id')
+                                verification_success = True
+                                break
+                    except Exception as e:
+                        log(f"⚠️ Error checking live orders for parameter match: {e}")
+            
+            if not verification_success:
+                log(f"⚠️ Warning: Could not verify order ID {last_order_id} - proceeding with caution")
+                # Don't fail the trade, but log the warning
         else:
             log(f"⚠️ Warning: Could not extract order ID from result: {result}")
             last_order_id = None
-        elapsed = time.time() - start_order_time
-        log(f"✅ Main at {order_price} and Bracket stop loss at {decision['stop_loss']} orders placed successfully in {elapsed:.2f}s")
-        if elapsed > 2.0:
-            log(f"⚠️  Trade execution exceeded 2s: {elapsed:.2f}s")
+            
+            # Try to get order ID from exchange as last resort
+            fallback_order_id = get_current_order_id()
+            if fallback_order_id:
+                log(f"🔄 Using exchange-provided order ID: {fallback_order_id}")
+                last_order_id = fallback_order_id
+        
+        order_verification_time = time.time() - order_verification_start
+        log(f"⏱️ Order verification completed in {order_verification_time:.2f}s")
+        
+        # Step 5: Final verification and status check
+        log("🔄 Step 3: Final order status verification...")
+        verification_start = time.time()
+        
+        if last_order_id:
+            # Wait a moment for order to be processed
+            time.sleep(1)
+            
+            # Check order status
+            try:
+                order_status = api.get_order_status(last_order_id)
+                if order_status:
+                    log(f"📊 Order {last_order_id} status: {order_status.get('state', 'unknown')}")
+                    
+                    # Check if order is in a good state
+                    if order_status.get('state') in ['open', 'pending']:
+                        log(f"✅ Order {last_order_id} is active and ready")
+                    elif order_status.get('state') in ['filled', 'partially_filled']:
+                        log(f"🎉 Order {last_order_id} has been filled!")
+                    else:
+                        log(f"⚠️ Order {last_order_id} in unexpected state: {order_status.get('state')}")
+                else:
+                    log(f"⚠️ Could not retrieve status for order {last_order_id}")
+            except Exception as e:
+                log(f"⚠️ Error checking order status: {e}")
+        
+        verification_time = time.time() - verification_start
+        log(f"⏱️ Final verification completed in {verification_time:.2f}s")
+        
+        # Step 6: Performance summary
+        total_time = time.time() - start_time
+        log(f"✅ Trade execution completed successfully!")
+        log(f"📊 Performance Summary:")
+        log(f"   - Total execution time: {total_time:.2f}s")
+        log(f"   - Cancellation time: {cancel_time:.2f}s")
+        log(f"   - Order placement time: {order_placement_time:.2f}s")
+        log(f"   - Order verification time: {order_verification_time:.2f}s")
+        log(f"   - Final verification time: {verification_time:.2f}s")
+        
+        # Performance warnings based on configuration
+        if total_time > MAX_TOTAL_EXECUTION_TIME:
+            log(f"⚠️ Trade execution exceeded {MAX_TOTAL_EXECUTION_TIME}s: {total_time:.2f}s")
+        elif total_time > PERFORMANCE_WARNING_THRESHOLD:
+            log(f"⚠️ Trade execution exceeded {PERFORMANCE_WARNING_THRESHOLD}s: {total_time:.2f}s")
+        
         return True
+        
     except Exception as e:
+        total_time = time.time() - start_time
         log(f"❌ Error placing order: {e}")
+        log(f"📊 Failed execution time: {total_time:.2f}s")
+        
+        # Fail-safe: Try to get any order ID that might have been created
+        try:
+            fallback_order_id = get_current_order_id()
+            if fallback_order_id:
+                log(f"🔄 Fail-safe: Found order ID {fallback_order_id} - updating tracking")
+                global last_order_id
+                last_order_id = fallback_order_id
+        except Exception as fallback_error:
+            log(f"⚠️ Fail-safe order ID retrieval failed: {fallback_error}")
+        
         return False
 
 print('Starting optimized live trading loop...')
@@ -897,13 +1053,58 @@ while True:
             if prev_supertrend_signal is not None and last_signal != prev_supertrend_signal:
                 log("SuperTrend direction changed. Closing current position and opening new one.")
                 try:
-                    api.close_all_positions(84)
+                    # Enhanced position closing with retry mechanism
+                    log("🔄 Closing positions with retry mechanism...")
+                    from config import MAX_CLOSE_RETRIES, RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY
+                    close_success = False
+                    
+                    for attempt in range(MAX_CLOSE_RETRIES):
+                        try:
+                            close_result = api.close_all_positions(84)
+                            if close_result:
+                                close_success = True
+                                log(f"✅ Position closing successful on attempt {attempt + 1}")
+                                break
+                            else:
+                                log(f"⚠️ Position closing attempt {attempt + 1} failed, retrying...")
+                                time.sleep(RETRY_WAIT_TIME)
+                        except Exception as close_error:
+                            log(f"❌ Position closing attempt {attempt + 1} error: {close_error}")
+                            if attempt < MAX_CLOSE_RETRIES - 1:
+                                time.sleep(RETRY_WAIT_TIME)
+                    
+                    if not close_success:
+                        log("❌ Critical Error: Could not close positions after all retries")
+                        log("   Manual intervention may be required to close positions on the platform")
+                        # Continue with trading logic anyway, but log the issue
+                    
+                    # Verify position closure
+                    try:
+                        time.sleep(POSITION_VERIFICATION_DELAY)  # Wait for position closure to process
+                        state = api.get_account_state(product_id=84)
+                        if state.get('has_positions', True):
+                            log("⚠️ Warning: Positions may still exist after closure attempt")
+                        else:
+                            log("✅ Position closure verified successfully")
+                    except Exception as verify_error:
+                        log(f"⚠️ Could not verify position closure: {verify_error}")
+                    
+                    # Place new order
                     decision = run_strategy_optimized(candles, capital)
                     if decision and decision['action']:
                         execute_trade_optimized(decision)
                         pending_order_iterations = 0
                 except Exception as e:
                     log(f"❌ Error handling SuperTrend change: {e}")
+                    # Fail-safe: Try to continue with trading logic
+                    try:
+                        decision = run_strategy_optimized(candles, capital)
+                        if decision and decision['action']:
+                            log("🔄 Attempting to place new order despite position closure error...")
+                            execute_trade_optimized(decision)
+                            pending_order_iterations = 0
+                    except Exception as fallback_error:
+                        log(f"❌ Fallback order placement also failed: {fallback_error}")
             else:
                 latest_supertrend = candles.iloc[-1]['supertrend']
                 if last_order_id is not None:
