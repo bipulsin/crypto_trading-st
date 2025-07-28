@@ -3,6 +3,16 @@ import time
 from delta_api import DeltaAPI
 from config import LEVERAGE, POSITION_SIZE_PERCENT
 
+# Import log function from main
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+def log(msg):
+    """Log function for strategy logging"""
+    import datetime
+    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+
 class LiveStrategy:
     def __init__(self, api=None):
         self.api = api if api else DeltaAPI()
@@ -52,10 +62,51 @@ class LiveStrategy:
                 else:
                     return entry_price * 1.10
 
+    def reset_position_state(self):
+        """Reset position state when position is closed externally"""
+        self.position = None
+        self.entry_price = None
+        self.stop_loss = None
+        log("🔄 Strategy position state reset - ready for new trades")
+
+    def check_exchange_position_state(self):
+        """Check actual position state from exchange and sync if needed"""
+        try:
+            state = self.api.get_account_state(product_id=84)
+            has_position = state.get('has_positions', False)
+            
+            # If strategy thinks we have position but exchange says no
+            if self.position is not None and not has_position:
+                log("🔄 Position mismatch detected - strategy thinks we have position but exchange says no")
+                self.reset_position_state()
+                return True  # State was reset
+            # If strategy thinks we have no position but exchange says yes
+            elif self.position is None and has_position:
+                log("🔄 Position mismatch detected - strategy thinks no position but exchange says yes")
+                # Get position details and update strategy state
+                position_details = self.api.get_positions(product_id=84)
+                if position_details and len(position_details) > 0:
+                    position = position_details[0]
+                    position_size = float(position.get('size', 0))
+                    if position_size > 0:
+                        self.position = 'LONG'
+                    elif position_size < 0:
+                        self.position = 'SHORT'
+                    self.entry_price = float(position.get('entry_price', 0))
+                    log(f"🔄 Strategy state synced with exchange - Position: {self.position}")
+                return True  # State was updated
+            return False  # No state change needed
+        except Exception as e:
+            log(f"⚠️ Error checking exchange position state: {e}")
+            return False
+
     def decide(self, df, capital):
         """Main strategy decision logic"""
         if df is None or df.empty or len(df) < 2:
             return {'action': None, 'side': None, 'qty': 0, 'price': 0, 'stop_loss': None}
+        
+        # First, sync strategy state with exchange state
+        self.check_exchange_position_state()
             
         last = df.iloc[-1]
         prev = df.iloc[-2] if len(df) > 1 else last

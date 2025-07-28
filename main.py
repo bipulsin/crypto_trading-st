@@ -812,6 +812,9 @@ def continuous_monitoring_cycle():
                             log("⚠️ Warning: Positions may still exist after closure attempt")
                         else:
                             log("✅ Position closure verified successfully")
+                            # Reset strategy state after successful position closure
+                            strategy.reset_position_state()
+                            log("🔄 Strategy state reset after position closure - ready for new trades")
                     except Exception as verify_error:
                         log(f"⚠️ Could not verify position closure: {verify_error}")
                         
@@ -855,7 +858,13 @@ def continuous_monitoring_cycle():
             order_validation_success = validate_and_handle_existing_orders(candles, current_capital)
             if not order_validation_success:
                 log("⚠️ Order validation failed in continuous monitoring")
-                
+        else:
+            # No orders exist - check if strategy state needs reset
+            if not has_position:
+                # No positions and no orders - reset strategy state
+                strategy.reset_position_state()
+                log("🔄 Strategy state reset - no positions or orders detected")
+            
     except Exception as e:
         log(f"❌ Error in continuous monitoring cycle: {e}")
 
@@ -1217,6 +1226,9 @@ while True:
         elif not has_order:
             log("🎯 No active position or order - placing new order at candle close.")
             try:
+                # Ensure strategy state is synchronized before making decision
+                strategy.check_exchange_position_state()
+                
                 decision = run_strategy_optimized(candles, capital)
                 if decision and decision['action']:
                     execute_trade_optimized(decision)
