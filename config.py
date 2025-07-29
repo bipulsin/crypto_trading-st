@@ -79,3 +79,8 @@ ENABLE_CONTINUOUS_MONITORING = True  # Enable continuous position/order monitori
 ENABLE_CANDLE_CLOSE_ENTRIES = True  # Only place new orders at candle close
 MONITORING_INTERVAL = 60  # Seconds between monitoring checks (when not at candle close)
 CANDLE_CLOSE_BUFFER = 10  # Seconds buffer before candle close to prepare for entry
+
+# New: Immediate order placement after cancellation
+ENABLE_IMMEDIATE_REENTRY = True  # Allow immediate new order placement after cancellation
+IMMEDIATE_REENTRY_DELAY = 5  # Seconds to wait before placing new order after cancellation
+ENABLE_FLEXIBLE_ENTRY = False  # Allow new orders anytime (not just at candle close)

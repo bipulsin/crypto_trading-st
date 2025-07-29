@@ -742,115 +742,134 @@ def is_candle_close():
     return now.minute % CANDLE_INTERVAL == 0 and now.second == 0
 
 def continuous_monitoring_cycle():
-    """Continuous monitoring cycle for immediate position/order closure"""
-    from config import MAX_CLOSE_RETRIES, RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY
+    """Continuous monitoring for position/order closure and immediate re-entry"""
+    from config import (ENABLE_IMMEDIATE_REENTRY, IMMEDIATE_REENTRY_DELAY, 
+                       ENABLE_FLEXIBLE_ENTRY, MONITORING_INTERVAL)
     global last_order_id, prev_supertrend_signal
     
-    if not ENABLE_CONTINUOUS_MONITORING:
-        return
-    
     try:
-        # Get current market data for monitoring
+        # Fetch market data and calculate SuperTrend
         candles = fetch_candles_optimized()
-        if candles is None or candles.empty:
+        if candles is None or (isinstance(candles, pd.DataFrame) and candles.empty):
             return
             
         candles = calculate_supertrend_optimized(candles)
         if candles is None:
             return
             
-        # Get current signals
-        if len(candles) < 2:
-            return
-            
-        last_signal = int(candles.iloc[-1]['supertrend_signal'])
-        prev_signal = int(candles.iloc[-2]['supertrend_signal']) if len(candles) > 1 else last_signal
-        
         # Get account state
         try:
             state = api.get_account_state(product_id=84)
             has_position = state['has_positions']
             has_order = state['has_orders']
         except Exception as e:
-            log(f"❌ Error getting account state in monitoring: {e}")
+            log(f"❌ Error getting account state in continuous monitoring: {e}")
             return
-        
-        # Check for position closure conditions
-        if has_position:
-            # Check if SuperTrend direction changed (immediate closure)
-            if prev_supertrend_signal is not None and last_signal != prev_supertrend_signal:
-                log("🚨 SuperTrend direction changed - IMMEDIATE POSITION CLOSURE")
-                try:
-                    # Enhanced position closing with retry mechanism
-                    log("🔄 Closing positions with retry mechanism...")
-                    close_success = False
-                    
-                    for attempt in range(MAX_CLOSE_RETRIES):
-                        try:
-                            close_result = api.close_all_positions(84)
-                            if close_result:
-                                close_success = True
-                                log(f"✅ Position closing successful on attempt {attempt + 1}")
-                                break
-                            else:
-                                log(f"⚠️ Position closing attempt {attempt + 1} failed, retrying...")
-                                time.sleep(RETRY_WAIT_TIME)
-                        except Exception as close_error:
-                            log(f"❌ Position closing attempt {attempt + 1} error: {close_error}")
-                            if attempt < MAX_CLOSE_RETRIES - 1:
-                                time.sleep(RETRY_WAIT_TIME)
-                    
-                    if not close_success:
-                        log("❌ Critical Error: Could not close positions after all retries")
-                        log("   Manual intervention may be required to close positions on the platform")
-                    
-                    # Verify position closure
-                    try:
-                        time.sleep(POSITION_VERIFICATION_DELAY)
-                        state = api.get_account_state(product_id=84)
-                        if state.get('has_positions', True):
-                            log("⚠️ Warning: Positions may still exist after closure attempt")
-                        else:
-                            log("✅ Position closure verified successfully")
-                            # Reset strategy state after successful position closure
-                            strategy.reset_position_state()
-                            log("🔄 Strategy state reset after position closure - ready for new trades")
-                    except Exception as verify_error:
-                        log(f"⚠️ Could not verify position closure: {verify_error}")
-                        
-                except Exception as e:
-                    log(f"❌ Error in continuous monitoring position closure: {e}")
             
-            # Update stop loss for existing positions
-            else:
-                latest_supertrend = candles.iloc[-1]['supertrend']
-                if last_order_id is not None:
+        # Check for SuperTrend signal change with existing positions
+        if has_position:
+            current_signal = int(candles.iloc[-1]['supertrend_signal'])
+            if prev_supertrend_signal is not None and current_signal != prev_supertrend_signal:
+                log(f"🔄 SuperTrend signal changed from {prev_supertrend_signal} to {current_signal} - closing position immediately")
+                
+                # Close positions with retry mechanism
+                close_success = False
+                for attempt in range(MAX_CLOSE_RETRIES):
                     try:
-                        api.edit_bracket_order(order_id=last_order_id, stop_loss=latest_supertrend)
-                        log(f"📊 Updated stop loss to latest SuperTrend value: {latest_supertrend} for order {last_order_id}")
+                        close_result = api.close_all_positions(84)
+                        if close_result.get('success', False):
+                            close_success = True
+                            log(f"✅ Position closed successfully (attempt {attempt + 1})")
+                            break
+                        else:
+                            log(f"⚠️ Position close attempt {attempt + 1} failed: {close_result}")
+                    except Exception as e:
+                        log(f"❌ Error closing position (attempt {attempt + 1}): {e}")
+                    
+                    if attempt < MAX_CLOSE_RETRIES - 1:
+                        time.sleep(RETRY_WAIT_TIME)
+                
+                if not close_success:
+                    log("❌ Critical Error: Could not close positions after all retries")
+                    log("   Manual intervention may be required to close positions on the platform")
+                
+                # Verify position closure
+                try:
+                    time.sleep(POSITION_VERIFICATION_DELAY)
+                    state = api.get_account_state(product_id=84)
+                    if state.get('has_positions', True):
+                        log("⚠️ Warning: Positions may still exist after closure attempt")
+                    else:
+                        log("✅ Position closure verified successfully")
+                        # Reset strategy state after successful position closure
+                        strategy.reset_position_state()
+                        log("🔄 Strategy state reset after position closure - ready for new trades")
+                        
+                        # NEW: Immediate re-entry after position closure
+                        if ENABLE_IMMEDIATE_REENTRY:
+                            log(f"⏳ Waiting {IMMEDIATE_REENTRY_DELAY} seconds before attempting immediate re-entry...")
+                            time.sleep(IMMEDIATE_REENTRY_DELAY)
+                            
+                            # Check if we should place a new order immediately
+                            try:
+                                # Ensure strategy state is synchronized
+                                strategy.check_exchange_position_state()
+                                
+                                # Get fresh market data for decision
+                                fresh_candles = fetch_candles_optimized()
+                                if fresh_candles is not None:
+                                    fresh_candles = calculate_supertrend_optimized(fresh_candles)
+                                    if fresh_candles is not None:
+                                        current_capital = get_current_capital()
+                                        decision = run_strategy_optimized(fresh_candles, current_capital)
+                                        if decision and decision['action']:
+                                            log("🚀 Immediate re-entry triggered after position closure")
+                                            execute_trade_optimized(decision)
+                                        else:
+                                            log("📊 No immediate re-entry signal after position closure")
+                                    else:
+                                        log("⚠️ Could not calculate SuperTrend for immediate re-entry")
+                                else:
+                                    log("⚠️ Could not fetch fresh market data for immediate re-entry")
+                            except Exception as e:
+                                log(f"❌ Error during immediate re-entry attempt: {e}")
+                        
+                except Exception as verify_error:
+                    log(f"⚠️ Could not verify position closure: {verify_error}")
+                    
+            except Exception as e:
+                log(f"❌ Error in continuous monitoring position closure: {e}")
+        
+        # Update stop loss for existing positions
+        else:
+            latest_supertrend = candles.iloc[-1]['supertrend']
+            if last_order_id is not None:
+                try:
+                    api.edit_bracket_order(order_id=last_order_id, stop_loss=latest_supertrend)
+                    log(f"📊 Updated stop loss to latest SuperTrend value: {latest_supertrend} for order {last_order_id}")
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
+                        log(f"Order {last_order_id} no longer exists, resetting last_order_id")
+                        last_order_id = None
+                    else:
+                        log(f"Failed to update stop loss for order {last_order_id}: {e}")
+            else:
+                # Try to retrieve order ID from exchange as fallback
+                fallback_order_id = get_current_order_id()
+                if fallback_order_id is not None:
+                    try:
+                        api.edit_bracket_order(order_id=fallback_order_id, stop_loss=latest_supertrend)
+                        log(f"📊 Updated stop loss using fallback order ID: {latest_supertrend} for order {fallback_order_id}")
+                        last_order_id = fallback_order_id
                     except Exception as e:
                         error_msg = str(e).lower()
                         if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
-                            log(f"Order {last_order_id} no longer exists, resetting last_order_id")
+                            log(f"Fallback order {fallback_order_id} no longer exists")
                             last_order_id = None
                         else:
-                            log(f"Failed to update stop loss for order {last_order_id}: {e}")
-                else:
-                    # Try to retrieve order ID from exchange as fallback
-                    fallback_order_id = get_current_order_id()
-                    if fallback_order_id is not None:
-                        try:
-                            api.edit_bracket_order(order_id=fallback_order_id, stop_loss=latest_supertrend)
-                            log(f"📊 Updated stop loss using fallback order ID: {latest_supertrend} for order {fallback_order_id}")
-                            last_order_id = fallback_order_id
-                        except Exception as e:
-                            error_msg = str(e).lower()
-                            if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
-                                log(f"Fallback order {fallback_order_id} no longer exists")
-                                last_order_id = None
-                            else:
-                                log(f"Failed to update stop loss with fallback order ID {fallback_order_id}: {e}")
-        
+                            log(f"Failed to update stop loss with fallback order ID {fallback_order_id}: {e}")
+    
         # Check for order cancellation conditions (invalid orders)
         if has_order:
             # Validate existing orders against current strategy
@@ -864,6 +883,22 @@ def continuous_monitoring_cycle():
                 # No positions and no orders - reset strategy state
                 strategy.reset_position_state()
                 log("🔄 Strategy state reset - no positions or orders detected")
+                
+                # NEW: Check for immediate new order placement (if flexible entry is enabled)
+                if ENABLE_FLEXIBLE_ENTRY and not is_candle_close():
+                    try:
+                        # Ensure strategy state is synchronized
+                        strategy.check_exchange_position_state()
+                        
+                        current_capital = get_current_capital()
+                        decision = run_strategy_optimized(candles, current_capital)
+                        if decision and decision['action']:
+                            log("🚀 Flexible entry triggered - placing new order outside candle close")
+                            execute_trade_optimized(decision)
+                        else:
+                            log("📊 No flexible entry signal - waiting for next monitoring cycle")
+                    except Exception as e:
+                        log(f"❌ Error during flexible entry attempt: {e}")
             
     except Exception as e:
         log(f"❌ Error in continuous monitoring cycle: {e}")
@@ -1081,6 +1116,61 @@ def execute_trade_optimized(decision):
         
         return False
 
+def handle_order_cancellation_with_reentry(candles, current_capital):
+    """Handle order cancellation and immediately attempt re-entry if conditions are met"""
+    from config import ENABLE_IMMEDIATE_REENTRY, IMMEDIATE_REENTRY_DELAY
+    
+    try:
+        log("🔄 Cancelling existing orders and attempting immediate re-entry...")
+        
+        # Cancel all orders
+        cancel_success = force_cancel_pending_orders()
+        
+        if cancel_success:
+            log("✅ Orders cancelled successfully")
+            
+            # Verify cancellation
+            if verify_cancellation_success():
+                log("✅ Order cancellation verified")
+                
+                # Immediate re-entry logic
+                if ENABLE_IMMEDIATE_REENTRY:
+                    log(f"⏳ Waiting {IMMEDIATE_REENTRY_DELAY} seconds before attempting immediate re-entry...")
+                    time.sleep(IMMEDIATE_REENTRY_DELAY)
+                    
+                    # Get fresh market data
+                    fresh_candles = fetch_candles_optimized()
+                    if fresh_candles is not None:
+                        fresh_candles = calculate_supertrend_optimized(fresh_candles)
+                        if fresh_candles is not None:
+                            # Ensure strategy state is synchronized
+                            strategy.check_exchange_position_state()
+                            
+                            # Make trading decision
+                            decision = run_strategy_optimized(fresh_candles, current_capital)
+                            if decision and decision['action']:
+                                log("🚀 Immediate re-entry triggered after order cancellation")
+                                execute_trade_optimized(decision)
+                                return True
+                            else:
+                                log("📊 No immediate re-entry signal after order cancellation")
+                        else:
+                            log("⚠️ Could not calculate SuperTrend for immediate re-entry")
+                    else:
+                        log("⚠️ Could not fetch fresh market data for immediate re-entry")
+                else:
+                    log("📊 Immediate re-entry disabled - waiting for next cycle")
+            else:
+                log("⚠️ Order cancellation verification failed")
+        else:
+            log("❌ Failed to cancel orders")
+            
+        return False
+        
+    except Exception as e:
+        log(f"❌ Error in order cancellation with re-entry: {e}")
+        return False
+
 print('Starting optimized live trading loop...')
 
 # Initialize order tracking on startup
@@ -1127,157 +1217,168 @@ while True:
         if ENABLE_CONTINUOUS_MONITORING:
             continuous_monitoring_cycle()
         
-        # Only proceed with full trading logic at candle close
-        if not at_candle_close and ENABLE_CANDLE_CLOSE_ENTRIES:
+        # Determine if we should proceed with new order placement
+        should_place_new_order = False
+        
+        if ENABLE_FLEXIBLE_ENTRY:
+            # Flexible entry: place orders anytime when conditions are met
+            should_place_new_order = True
+        elif at_candle_close and ENABLE_CANDLE_CLOSE_ENTRIES:
+            # Candle-close entry: only place orders at candle close
+            should_place_new_order = True
+        else:
             # Wait for next monitoring cycle
             time.sleep(MONITORING_INTERVAL)
             continue
         
-        # Full trading logic - only executed at candle close
-        log("🕐 Candle close detected - executing full trading logic")
-        
-        # Fetch and validate candle data
-        candles = fetch_candles_optimized()
-        if candles is None or (isinstance(candles, pd.DataFrame) and candles.empty):
-            if CANDLE_FALLBACK_ENABLED:
-                log("No Delta Exchange candle data, trying Binance as fallback...")
-                binance_candles = api.get_candles_binance(symbol='BTCUSDT', interval=f'{CANDLE_INTERVAL}m', limit=100)
-                if binance_candles is None or len(binance_candles) == 0:
-                    log("No Binance candle data either. Skipping iteration.")
+        # Full trading logic - executed based on timing configuration
+        if should_place_new_order:
+            if at_candle_close:
+                log("🕐 Candle close detected - executing full trading logic")
+            else:
+                log("🎯 Flexible entry mode - executing trading logic")
+            
+            # Fetch and validate candle data
+            candles = fetch_candles_optimized()
+            if candles is None or (isinstance(candles, pd.DataFrame) and candles.empty):
+                if CANDLE_FALLBACK_ENABLED:
+                    log("No Delta Exchange candle data, trying Binance as fallback...")
+                    binance_candles = api.get_candles_binance(symbol='BTCUSDT', interval=f'{CANDLE_INTERVAL}m', limit=100)
+                    if binance_candles is None or len(binance_candles) == 0:
+                        log("No Binance candle data either. Skipping iteration.")
+                        time.sleep(30)
+                        continue
+                    candles = pd.DataFrame(binance_candles)
+                    candles['datetime'] = pd.to_datetime(candles['time'], unit='s')
+                    candles = candles.sort_values('datetime')
+                else:
+                    log("No Delta Exchange candle data and fallback is disabled. Skipping iteration.")
                     time.sleep(30)
                     continue
-                candles = pd.DataFrame(binance_candles)
-                candles['datetime'] = pd.to_datetime(candles['time'], unit='s')
-                candles = candles.sort_values('datetime')
-            else:
-                log("No Delta Exchange candle data and fallback is disabled. Skipping iteration.")
+                    
+            # Calculate SuperTrend
+            candles = calculate_supertrend_optimized(candles)
+            if candles is None:
+                log("Skipping iteration due to SuperTrend calculation error")
                 time.sleep(30)
                 continue
                 
-        # Calculate SuperTrend
-        candles = calculate_supertrend_optimized(candles)
-        if candles is None:
-            log("Skipping iteration due to SuperTrend calculation error")
-            time.sleep(30)
-            continue
+            # Validate existing orders and positions
+            current_capital = get_current_capital()
+            order_validation_success = validate_and_handle_existing_orders(candles, current_capital)
+            position_validation_success = validate_and_handle_existing_positions(candles, current_capital)
             
-        # Validate existing orders and positions
-        current_capital = get_current_capital()
-        order_validation_success = validate_and_handle_existing_orders(candles, current_capital)
-        position_validation_success = validate_and_handle_existing_positions(candles, current_capital)
-        
-        if not order_validation_success:
-            log("⚠️ Order validation failed, continuing with trading logic")
-        if not position_validation_success:
-            log("⚠️ Position validation failed, continuing with trading logic")
+            if not order_validation_success:
+                log("⚠️ Order validation failed, continuing with trading logic")
+            if not position_validation_success:
+                log("⚠️ Position validation failed, continuing with trading logic")
+                
+            # Get current signals
+            if len(candles) < 2:
+                log("⚠️ Insufficient candle data for signal generation")
+                time.sleep(30)
+                continue
+                
+            last_signal = int(candles.iloc[-1]['supertrend_signal'])
+            prev_signal = int(candles.iloc[-2]['supertrend_signal']) if len(candles) > 1 else last_signal
             
-        # Get current signals
-        if len(candles) < 2:
-            log("⚠️ Insufficient candle data for signal generation")
-            time.sleep(30)
-            continue
-            
-        last_signal = int(candles.iloc[-1]['supertrend_signal'])
-        prev_signal = int(candles.iloc[-2]['supertrend_signal']) if len(candles) > 1 else last_signal
-        
-        # Get account state
-        try:
-            state = api.get_account_state(product_id=84)
-            has_position = state['has_positions']
-            has_order = state['has_orders']
-        except Exception as e:
-            log(f"❌ Error getting account state: {e}")
-            time.sleep(30)
-            continue
-            
-        # Main trading logic - only for new order placement at candle close
-        if has_position:
-            # Position already exists - no new order needed
-            log("📊 Position exists - no new order placement needed at candle close")
-            latest_supertrend = candles.iloc[-1]['supertrend']
-            if last_order_id is not None:
-                try:
-                    api.edit_bracket_order(order_id=last_order_id, stop_loss=latest_supertrend)
-                    log(f"Updated stop loss to latest SuperTrend value: {latest_supertrend} for order {last_order_id}")
-                except Exception as e:
-                    error_msg = str(e).lower()
-                    if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
-                        log(f"Order {last_order_id} no longer exists, resetting last_order_id")
-                        last_order_id = None
-                    else:
-                        log(f"Failed to update stop loss for order {last_order_id}: {e}")
-            else:
-                # Try to retrieve order ID from exchange as fallback
-                fallback_order_id = get_current_order_id()
-                if fallback_order_id is not None:
+            # Get account state
+            try:
+                state = api.get_account_state(product_id=84)
+                has_position = state['has_positions']
+                has_order = state['has_orders']
+            except Exception as e:
+                log(f"❌ Error getting account state: {e}")
+                time.sleep(30)
+                continue
+                
+            # Main trading logic - for new order placement
+            if has_position:
+                # Position already exists - no new order needed
+                log("📊 Position exists - no new order placement needed")
+                latest_supertrend = candles.iloc[-1]['supertrend']
+                if last_order_id is not None:
                     try:
-                        api.edit_bracket_order(order_id=fallback_order_id, stop_loss=latest_supertrend)
-                        log(f"Updated stop loss using fallback order ID: {latest_supertrend} for order {fallback_order_id}")
-                        last_order_id = fallback_order_id  # Update our tracking
+                        api.edit_bracket_order(order_id=last_order_id, stop_loss=latest_supertrend)
+                        log(f"Updated stop loss to latest SuperTrend value: {latest_supertrend} for order {last_order_id}")
                     except Exception as e:
                         error_msg = str(e).lower()
                         if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
-                            log(f"Fallback order {fallback_order_id} no longer exists")
+                            log(f"Order {last_order_id} no longer exists, resetting last_order_id")
                             last_order_id = None
                         else:
-                            log(f"Failed to update stop loss with fallback order ID {fallback_order_id}: {e}")
+                            log(f"Failed to update stop loss for order {last_order_id}: {e}")
                 else:
-                    log(f"No last_order_id available to update stop loss.")
-        elif not has_order:
-            log("🎯 No active position or order - placing new order at candle close.")
-            try:
-                # Ensure strategy state is synchronized before making decision
-                strategy.check_exchange_position_state()
-                
-                decision = run_strategy_optimized(candles, capital)
-                if decision and decision['action']:
-                    execute_trade_optimized(decision)
-                    pending_order_iterations = 0
-                else:
-                    log("📊 No trading signal at candle close - no order placed")
-            except Exception as e:
-                log(f"❌ Error placing new order at candle close: {e}")
-        else:
-            pending_order_iterations += 1
-            log(f"📊 Pending order detected at candle close. Iteration count: {pending_order_iterations}")
-            if pending_order_iterations >= PENDING_ORDER_MAX_ITERATIONS:
-                log("🔄 Pending order not filled after multiple iterations. Force cancelling and placing new order.")
-                try:
-                    # Force cancel all orders with retry mechanism
-                    cancel_success = force_cancel_pending_orders()
-                    
-                    if cancel_success:
-                        log("✅ Orders cancelled successfully")
-                        
-                        # Verify cancellation and place new order
-                        if verify_cancellation_success():
-                            decision = run_strategy_optimized(candles, capital)
-                            if decision and decision['action']:
-                                execute_trade_optimized(decision)
-                        else:
-                            log("⚠️ Orders still exist after force cancellation - skipping new order placement")
-                        
-                        pending_order_iterations = 0  # Reset counter to avoid infinite loop
+                    # Try to retrieve order ID from exchange as fallback
+                    fallback_order_id = get_current_order_id()
+                    if fallback_order_id is not None:
+                        try:
+                            api.edit_bracket_order(order_id=fallback_order_id, stop_loss=latest_supertrend)
+                            log(f"Updated stop loss using fallback order ID: {latest_supertrend} for order {fallback_order_id}")
+                            last_order_id = fallback_order_id  # Update our tracking
+                        except Exception as e:
+                            error_msg = str(e).lower()
+                            if "404" in error_msg or "not found" in error_msg or "does not exist" in error_msg:
+                                log(f"Fallback order {fallback_order_id} no longer exists")
+                                last_order_id = None
+                            else:
+                                log(f"Failed to update stop loss with fallback order ID {fallback_order_id}: {e}")
                     else:
-                        log("❌ Failed to cancel orders even with force cancellation")
-                        log("   Manual intervention may be required to cancel orders on the platform")
-                        pending_order_iterations = 0  # Reset counter to avoid infinite loop
-                        
-                except Exception as e:
-                    log(f"❌ Error handling pending order timeout: {e}")
-                    pending_order_iterations = 0  # Reset counter to avoid infinite loop
-            else:
-                log("⏳ Pending order still within acceptable iterations - continuing to wait")
+                        log(f"No last_order_id available to update stop loss.")
+            elif not has_order:
+                log("🎯 No active position or order - placing new order.")
+                try:
+                    # Ensure strategy state is synchronized before making decision
+                    strategy.check_exchange_position_state()
                     
-        prev_supertrend_signal = last_signal
-        iteration_time = time.time() - iteration_start
-        if iteration_time > MAX_ITERATION_TIME:
-            log(f"⚠️  Slow iteration: {iteration_time:.2f}s")
-        now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log(f'✅ Candle close processing completed - Waiting for next candle... ({now_str}) - Iteration time: {iteration_time:.2f}s')
-        
-        # Wait for next candle close
-        time.sleep(CANDLE_INTERVAL * 60)
+                    decision = run_strategy_optimized(candles, current_capital)
+                    if decision and decision['action']:
+                        execute_trade_optimized(decision)
+                        pending_order_iterations = 0
+                    else:
+                        log("📊 No trading signal - no order placed")
+                except Exception as e:
+                    log(f"❌ Error placing new order: {e}")
+            else:
+                pending_order_iterations += 1
+                log(f"📊 Pending order detected. Iteration count: {pending_order_iterations}")
+                if pending_order_iterations >= PENDING_ORDER_MAX_ITERATIONS:
+                    log("🔄 Pending order not filled after multiple iterations. Force cancelling and placing new order.")
+                    try:
+                        # Use the new cancellation with re-entry function
+                        reentry_success = handle_order_cancellation_with_reentry(candles, current_capital)
+                        
+                        if reentry_success:
+                            log("✅ Order cancellation and immediate re-entry completed successfully")
+                        else:
+                            log("⚠️ Order cancellation completed but immediate re-entry failed or not triggered")
+                        
+                        pending_order_iterations = 0  # Reset counter to avoid infinite loop
+                            
+                    except Exception as e:
+                        log(f"❌ Error handling pending order timeout: {e}")
+                        pending_order_iterations = 0  # Reset counter to avoid infinite loop
+                else:
+                    log("⏳ Pending order still within acceptable iterations - continuing to wait")
+                        
+            prev_supertrend_signal = last_signal
+            iteration_time = time.time() - iteration_start
+            if iteration_time > MAX_ITERATION_TIME:
+                log(f"⚠️  Slow iteration: {iteration_time:.2f}s")
+            now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            log(f'✅ Trading logic completed - Waiting for next cycle... ({now_str}) - Iteration time: {iteration_time:.2f}s')
+            
+            # Wait for next cycle based on configuration
+            if ENABLE_FLEXIBLE_ENTRY:
+                # Flexible entry: shorter wait time for more responsive trading
+                time.sleep(MONITORING_INTERVAL)
+            else:
+                # Candle-close entry: wait for next candle close
+                time.sleep(CANDLE_INTERVAL * 60)
+        else:
+            # Wait for next monitoring cycle
+            time.sleep(MONITORING_INTERVAL)
+            
     except Exception as e:
         log(f"❌ Critical error in main loop: {e}")
         time.sleep(5)
