@@ -861,9 +861,9 @@ def continuous_monitoring_cycle():
         else:
             # No orders exist - check if strategy state needs reset
             if not has_position:
-                # No positions and no orders - reset strategy state
-                strategy.reset_position_state()
-                log("🔄 Strategy state reset - no positions or orders detected")
+                # No positions and no orders - ensure strategy is ready for new trades
+                strategy.ensure_ready_for_new_trades()
+                log("🔄 Strategy state checked and ready for new trades - no positions or orders detected")
             
     except Exception as e:
         log(f"❌ Error in continuous monitoring cycle: {e}")
@@ -1229,12 +1229,18 @@ while True:
                 # Ensure strategy state is synchronized before making decision
                 strategy.check_exchange_position_state()
                 
+                # Additional check to ensure strategy is ready for new trades
+                strategy.ensure_ready_for_new_trades()
+                
                 decision = run_strategy_optimized(candles, capital)
                 if decision and decision['action']:
                     execute_trade_optimized(decision)
                     pending_order_iterations = 0
                 else:
                     log("📊 No trading signal at candle close - no order placed")
+                    log(f"   Strategy position state: {strategy.position}")
+                    log(f"   Last SuperTrend signal: {last_signal}")
+                    log(f"   Previous SuperTrend signal: {prev_signal}")
             except Exception as e:
                 log(f"❌ Error placing new order at candle close: {e}")
         else:
