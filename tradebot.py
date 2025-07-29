@@ -148,23 +148,43 @@ class DeltaExchangeBot:
             self.logger.warning(f"Insufficient data for SuperTrend calculation. Need {self.st_period}, got {len(df)}")
             return df
         
-        # Calculate SuperTrend
-        supertrend = ta.supertrend(
-            high=df['high'],
-            low=df['low'],
-            close=df['close'],
-            length=self.st_period,
-            multiplier=self.st_multiplier
-        )
-        
-        df[f'SUPERT_{self.st_period}_{self.st_multiplier}'] = supertrend[f'SUPERT_{self.st_period}_{self.st_multiplier}']
-        df[f'SUPERTd_{self.st_period}_{self.st_multiplier}'] = supertrend[f'SUPERTd_{self.st_period}_{self.st_multiplier}']
-        
-        # Determine trend direction (1 for bullish, -1 for bearish)
-        df['trend_direction'] = df[f'SUPERTd_{self.st_period}_{self.st_multiplier}']
-        df['supertrend_value'] = df[f'SUPERT_{self.st_period}_{self.st_multiplier}']
-        
-        return df
+        try:
+            # Calculate SuperTrend
+            supertrend = ta.supertrend(
+                high=df['high'],
+                low=df['low'],
+                close=df['close'],
+                length=self.st_period,
+                multiplier=self.st_multiplier
+            )
+            
+            # Debug: Log the actual column names returned by pandas_ta
+            self.logger.info(f"SuperTrend columns: {list(supertrend.columns)}")
+            
+            # The pandas_ta supertrend function returns columns with different naming
+            # Let's find the correct column names
+            supertrend_cols = [col for col in supertrend.columns if 'SUPERT' in col]
+            direction_cols = [col for col in supertrend.columns if 'SUPERTd' in col]
+            
+            if not supertrend_cols or not direction_cols:
+                self.logger.error(f"SuperTrend columns not found. Available columns: {list(supertrend.columns)}")
+                return df
+            
+            # Use the first found columns
+            supertrend_col = supertrend_cols[0]
+            direction_col = direction_cols[0]
+            
+            self.logger.info(f"Using SuperTrend columns: {supertrend_col}, {direction_col}")
+            
+            # Add the SuperTrend data to the dataframe
+            df['supertrend_value'] = supertrend[supertrend_col]
+            df['trend_direction'] = supertrend[direction_col]
+            
+            return df
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating SuperTrend: {e}")
+            return df
 
     def get_wallet_balance(self) -> float:
         """Get available wallet balance in USD"""
