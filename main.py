@@ -8,7 +8,8 @@ from config import (SYMBOL, CANDLE_INTERVAL, SUPERTREND_PERIOD, SUPERTREND_MULTI
                    CANDLE_FALLBACK_ENABLED, ORDER_PRICE_OFFSET, TAKE_PROFIT_MULTIPLIER,
                    CANCELLATION_VERIFICATION_ENABLED, CANCELLATION_VERIFICATION_ATTEMPTS,
                    CANCELLATION_WAIT_TIME, VERIFICATION_WAIT_TIME, ENABLE_CONTINUOUS_MONITORING,
-                   ENABLE_CANDLE_CLOSE_ENTRIES, MONITORING_INTERVAL)
+                   ENABLE_CANDLE_CLOSE_ENTRIES, MONITORING_INTERVAL, MAX_CLOSE_RETRIES,
+                   RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY)
 import datetime
 import logging
 import concurrent.futures
@@ -744,7 +745,8 @@ def is_candle_close():
 def continuous_monitoring_cycle():
     """Continuous monitoring for position/order closure and immediate re-entry"""
     from config import (ENABLE_IMMEDIATE_REENTRY, IMMEDIATE_REENTRY_DELAY, 
-                       ENABLE_FLEXIBLE_ENTRY, MONITORING_INTERVAL)
+                       ENABLE_FLEXIBLE_ENTRY, MONITORING_INTERVAL, MAX_CLOSE_RETRIES,
+                       RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY)
     global last_order_id, prev_supertrend_signal
     
     try:
@@ -837,9 +839,6 @@ def continuous_monitoring_cycle():
                 except Exception as verify_error:
                     log(f"⚠️ Could not verify position closure: {verify_error}")
                     
-            except Exception as e:
-                log(f"❌ Error in continuous monitoring position closure: {e}")
-        
         # Update stop loss for existing positions
         else:
             latest_supertrend = candles.iloc[-1]['supertrend']
@@ -869,6 +868,8 @@ def continuous_monitoring_cycle():
                             last_order_id = None
                         else:
                             log(f"Failed to update stop loss with fallback order ID {fallback_order_id}: {e}")
+                else:
+                    log(f"No last_order_id available to update stop loss.")
     
         # Check for order cancellation conditions (invalid orders)
         if has_order:
@@ -880,9 +881,9 @@ def continuous_monitoring_cycle():
         else:
             # No orders exist - check if strategy state needs reset
             if not has_position:
-                # No positions and no orders - reset strategy state
-                strategy.reset_position_state()
-                log("🔄 Strategy state reset - no positions or orders detected")
+                # No positions and no orders - ensure strategy is ready for new trades
+                strategy.ensure_ready_for_new_trades()
+                log("🔄 Strategy state checked and ready for new trades - no positions or orders detected")
                 
                 # NEW: Check for immediate new order placement (if flexible entry is enabled)
                 if ENABLE_FLEXIBLE_ENTRY and not is_candle_close():
@@ -1331,12 +1332,18 @@ while True:
                     # Ensure strategy state is synchronized before making decision
                     strategy.check_exchange_position_state()
                     
+                    # Additional check to ensure strategy is ready for new trades
+                    strategy.ensure_ready_for_new_trades()
+                    
                     decision = run_strategy_optimized(candles, current_capital)
                     if decision and decision['action']:
                         execute_trade_optimized(decision)
                         pending_order_iterations = 0
                     else:
                         log("📊 No trading signal - no order placed")
+                        log(f"   Strategy position state: {strategy.position}")
+                        log(f"   Last SuperTrend signal: {last_signal}")
+                        log(f"   Previous SuperTrend signal: {prev_signal}")
                 except Exception as e:
                     log(f"❌ Error placing new order: {e}")
             else:
