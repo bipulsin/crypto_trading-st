@@ -11,20 +11,21 @@ import os
 from dotenv import load_dotenv
 import threading
 from typing import Dict, List, Optional, Tuple
+from config import BASE_URL, API_KEY, API_SECRET, SYMBOL_ID, SYMBOL
 
 # Load environment variables
 load_dotenv()
 
 class DeltaExchangeBot:
     def __init__(self):
-        # API Configuration
-        self.base_url = 'https://cdn-ind.testnet.deltaex.org'  # Change to testnet for testing
-        self.api_key = os.getenv('API_KEY', 'Dif1lSZl16ibEVhqKboD1UkQ5Z4qD7')
-        self.api_secret = os.getenv('API_SECRET', 'kjDLM1vF5GI8THQylfIBRyMmfrL3pkheUomTBmJLCVJHwVCz0Fuk5KCA5WYH')
+        # API Configuration - Use config values
+        self.base_url = BASE_URL
+        self.api_key = API_KEY
+        self.api_secret = API_SECRET
         
         # Trading Configuration
-        self.symbol = 'BTCUSD'
-        self.product_id = 84
+        self.symbol = SYMBOL
+        self.product_id = SYMBOL_ID
         self.resolution = '5m'
         
         # SuperTrend Parameters
@@ -68,10 +69,7 @@ class DeltaExchangeBot:
 
     def generate_signature(self, secret: str, message: str) -> str:
         """Generate HMAC signature for API authentication"""
-        message = bytes(message, 'utf-8')
-        secret = bytes(secret, 'utf-8')
-        hash_obj = hmac.new(secret, message, hashlib.sha256)
-        return hash_obj.hexdigest()
+        return hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
 
     def make_request(self, method: str, endpoint: str, params: Dict = None, data: Dict = None) -> Dict:
         """Make authenticated API request"""
@@ -79,21 +77,19 @@ class DeltaExchangeBot:
         path = f'/v2{endpoint}'
         url = f'{self.base_url}{path}'
         
-        query_string = ''
-        if params:
-            query_string = '&'.join([f'{k}={v}' for k, v in params.items()])
-            if query_string:
-                query_string = '?' + query_string
+        # Prepare body for signature
+        body = ""
+        if data:
+            body = json.dumps(data)
         
-        payload = json.dumps(data) if data else ''
-        signature_data = method + timestamp + path + query_string + payload
-        signature = self.generate_signature(self.api_secret, signature_data)
+        # Create signature message (method + timestamp + path + body)
+        message = method + timestamp + path + body
+        signature = self.generate_signature(self.api_secret, message)
         
         headers = {
             'api-key': self.api_key,
             'timestamp': timestamp,
             'signature': signature,
-            'User-Agent': 'supertrend-bot',
             'Content-Type': 'application/json'
         }
         
@@ -101,9 +97,9 @@ class DeltaExchangeBot:
             if method == 'GET':
                 response = requests.get(url, params=params, headers=headers, timeout=30)
             elif method == 'POST':
-                response = requests.post(url, data=payload, params=params, headers=headers, timeout=30)
+                response = requests.post(url, json=data, headers=headers, timeout=30)
             elif method == 'DELETE':
-                response = requests.delete(url, data=payload, params=params, headers=headers, timeout=30)
+                response = requests.delete(url, json=data, headers=headers, timeout=30)
             
             response.raise_for_status()
             return response.json()
