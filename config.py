@@ -84,3 +84,6 @@ CANDLE_CLOSE_BUFFER = 10  # Seconds buffer before candle close to prepare for en
 ENABLE_IMMEDIATE_REENTRY = True  # Allow immediate new order placement after cancellation
 IMMEDIATE_REENTRY_DELAY = 5  # Seconds to wait before placing new order after cancellation
 ENABLE_FLEXIBLE_ENTRY = False  # Allow new orders anytime (not just at candle close)
+
+# Position closure behavior
+ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE = True  # Only allow new positions at candle close after position closure

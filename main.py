@@ -9,7 +9,7 @@ from config import (SYMBOL, CANDLE_INTERVAL, SUPERTREND_PERIOD, SUPERTREND_MULTI
                    CANCELLATION_VERIFICATION_ENABLED, CANCELLATION_VERIFICATION_ATTEMPTS,
                    CANCELLATION_WAIT_TIME, VERIFICATION_WAIT_TIME, ENABLE_CONTINUOUS_MONITORING,
                    ENABLE_CANDLE_CLOSE_ENTRIES, MONITORING_INTERVAL, MAX_CLOSE_RETRIES,
-                   RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY)
+                   RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY, ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE)
 import datetime
 import logging
 import concurrent.futures
@@ -30,6 +30,7 @@ capital = DEFAULT_CAPITAL
 prev_supertrend_signal = None
 pending_order_iterations = 0
 last_order_id = None
+last_position_closure_time = None  # Track when last position was closed
 
 def fetch_candles_optimized():
     try:
@@ -735,6 +736,34 @@ def is_candle_close_approaching():
     seconds_until_close = (CANDLE_INTERVAL * 60) - (now.minute * 60 + now.second) % (CANDLE_INTERVAL * 60)
     return seconds_until_close <= CANDLE_CLOSE_BUFFER
 
+def can_place_new_order_after_closure():
+    """Check if we can place a new order after position closure based on timing requirements"""
+    global last_position_closure_time
+    
+    if not ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE:
+        return True  # No timing restriction
+    
+    if last_position_closure_time is None:
+        return True  # No previous closure recorded
+    
+    # Check if we're at candle close
+    if not is_candle_close():
+        return False  # Must wait for candle close
+    
+    # Check if enough time has passed since last closure (at least one candle)
+    now = datetime.datetime.now()
+    time_since_closure = now - last_position_closure_time
+    
+    # Require at least one full candle interval to have passed
+    min_wait_time = datetime.timedelta(minutes=CANDLE_INTERVAL)
+    
+    if time_since_closure < min_wait_time:
+        log(f"⏰ Waiting for full candle interval since last position closure ({time_since_closure.total_seconds()/60:.1f} minutes passed, need {CANDLE_INTERVAL} minutes)")
+        return False
+    
+    log(f"✅ Candle close requirement satisfied - {time_since_closure.total_seconds()/60:.1f} minutes since last position closure")
+    return True
+
 def is_candle_close():
     """Check if we're at the exact candle close time"""
     from config import CANDLE_INTERVAL
@@ -747,7 +776,7 @@ def continuous_monitoring_cycle():
     from config import (ENABLE_IMMEDIATE_REENTRY, IMMEDIATE_REENTRY_DELAY, 
                        ENABLE_FLEXIBLE_ENTRY, MONITORING_INTERVAL, MAX_CLOSE_RETRIES,
                        RETRY_WAIT_TIME, POSITION_VERIFICATION_DELAY)
-    global last_order_id, prev_supertrend_signal
+    global last_order_id, prev_supertrend_signal, last_position_closure_time
     
     try:
         # Fetch market data and calculate SuperTrend
@@ -803,12 +832,16 @@ def continuous_monitoring_cycle():
                         log("⚠️ Warning: Positions may still exist after closure attempt")
                     else:
                         log("✅ Position closure verified successfully")
+                        # Set the last position closure time
+                        last_position_closure_time = datetime.datetime.now()
+                        log(f"📅 Position closure time recorded: {last_position_closure_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                        
                         # Reset strategy state after successful position closure
                         strategy.reset_position_state()
                         log("🔄 Strategy state reset after position closure - ready for new trades")
                         
-                        # NEW: Immediate re-entry after position closure
-                        if ENABLE_IMMEDIATE_REENTRY:
+                        # NEW: Immediate re-entry after position closure (only if not requiring candle close)
+                        if ENABLE_IMMEDIATE_REENTRY and not ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE:
                             log(f"⏳ Waiting {IMMEDIATE_REENTRY_DELAY} seconds before attempting immediate re-entry...")
                             time.sleep(IMMEDIATE_REENTRY_DELAY)
                             
@@ -835,6 +868,8 @@ def continuous_monitoring_cycle():
                                     log("⚠️ Could not fetch fresh market data for immediate re-entry")
                             except Exception as e:
                                 log(f"❌ Error during immediate re-entry attempt: {e}")
+                        elif ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE:
+                            log("⏰ Candle close requirement enabled - next position will only be triggered at candle close")
                         
                 except Exception as verify_error:
                     log(f"⚠️ Could not verify position closure: {verify_error}")
@@ -887,6 +922,11 @@ def continuous_monitoring_cycle():
                 
                 # NEW: Check for immediate new order placement (if flexible entry is enabled)
                 if ENABLE_FLEXIBLE_ENTRY and not is_candle_close():
+                    # Check if we can place new orders after position closure
+                    if not can_place_new_order_after_closure():
+                        log("⏰ Waiting for candle close before flexible entry after position closure")
+                        return
+                    
                     try:
                         # Ensure strategy state is synchronized
                         strategy.check_exchange_position_state()
@@ -1119,7 +1159,8 @@ def execute_trade_optimized(decision):
 
 def handle_order_cancellation_with_reentry(candles, current_capital):
     """Handle order cancellation and immediately attempt re-entry if conditions are met"""
-    from config import ENABLE_IMMEDIATE_REENTRY, IMMEDIATE_REENTRY_DELAY
+    from config import ENABLE_IMMEDIATE_REENTRY, IMMEDIATE_REENTRY_DELAY, ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE
+    global last_position_closure_time
     
     try:
         log("🔄 Cancelling existing orders and attempting immediate re-entry...")
@@ -1130,12 +1171,16 @@ def handle_order_cancellation_with_reentry(candles, current_capital):
         if cancel_success:
             log("✅ Orders cancelled successfully")
             
+            # Set the last position closure time (treating order cancellation as position closure)
+            last_position_closure_time = datetime.datetime.now()
+            log(f"📅 Order cancellation time recorded: {last_position_closure_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
             # Verify cancellation
             if verify_cancellation_success():
                 log("✅ Order cancellation verified")
                 
-                # Immediate re-entry logic
-                if ENABLE_IMMEDIATE_REENTRY:
+                # Immediate re-entry logic (only if not requiring candle close)
+                if ENABLE_IMMEDIATE_REENTRY and not ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE:
                     log(f"⏳ Waiting {IMMEDIATE_REENTRY_DELAY} seconds before attempting immediate re-entry...")
                     time.sleep(IMMEDIATE_REENTRY_DELAY)
                     
@@ -1159,6 +1204,8 @@ def handle_order_cancellation_with_reentry(candles, current_capital):
                             log("⚠️ Could not calculate SuperTrend for immediate re-entry")
                     else:
                         log("⚠️ Could not fetch fresh market data for immediate re-entry")
+                elif ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE:
+                    log("⏰ Candle close requirement enabled - next position will only be triggered at candle close")
                 else:
                     log("📊 Immediate re-entry disabled - waiting for next cycle")
             else:
@@ -1328,6 +1375,13 @@ while True:
                         log(f"No last_order_id available to update stop loss.")
             elif not has_order:
                 log("🎯 No active position or order - placing new order.")
+                
+                # Check if we can place new orders after position closure
+                if not can_place_new_order_after_closure():
+                    log("⏰ Waiting for candle close before placing new order after position closure")
+                    time.sleep(MONITORING_INTERVAL)
+                    continue
+                
                 try:
                     # Ensure strategy state is synchronized before making decision
                     strategy.check_exchange_position_state()
