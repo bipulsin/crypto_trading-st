@@ -69,15 +69,35 @@ class LiveStrategy:
         self.stop_loss = None
         log("🔄 Strategy position state reset - ready for new trades")
 
+    def ensure_ready_for_new_trades(self):
+        """Ensure strategy is ready for new trades when no positions or orders exist"""
+        try:
+            state = self.api.get_account_state(product_id=84)
+            has_position = state.get('has_positions', False)
+            has_order = state.get('has_orders', False)
+            
+            # If no positions and no orders, but strategy still thinks it has a position
+            if not has_position and not has_order and self.position is not None:
+                log(f"🔄 No exchange positions/orders but strategy state is {self.position} - resetting for new trades")
+                self.reset_position_state()
+                return True
+            return False
+        except Exception as e:
+            log(f"⚠️ Error ensuring readiness for new trades: {e}")
+            return False
+
     def check_exchange_position_state(self):
         """Check actual position state from exchange and sync if needed"""
         try:
             state = self.api.get_account_state(product_id=84)
             has_position = state.get('has_positions', False)
             
+            log(f"🔍 Position state check - Strategy: {self.position}, Exchange: {'HAS_POSITION' if has_position else 'NO_POSITION'}")
+            
             # If strategy thinks we have position but exchange says no
             if self.position is not None and not has_position:
                 log("🔄 Position mismatch detected - strategy thinks we have position but exchange says no")
+                log(f"   Resetting strategy state from {self.position} to None")
                 self.reset_position_state()
                 return True  # State was reset
             # If strategy thinks we have no position but exchange says yes
@@ -93,8 +113,10 @@ class LiveStrategy:
                     elif position_size < 0:
                         self.position = 'SHORT'
                     self.entry_price = float(position.get('entry_price', 0))
-                    log(f"🔄 Strategy state synced with exchange - Position: {self.position}")
+                    log(f"🔄 Strategy state synced with exchange - Position: {self.position} at {self.entry_price}")
                 return True  # State was updated
+            else:
+                log(f"✅ Position states synchronized - Strategy: {self.position}, Exchange: {'HAS_POSITION' if has_position else 'NO_POSITION'}")
             return False  # No state change needed
         except Exception as e:
             log(f"⚠️ Error checking exchange position state: {e}")
@@ -106,6 +128,7 @@ class LiveStrategy:
             return {'action': None, 'side': None, 'qty': 0, 'price': 0, 'stop_loss': None}
         
         # First, sync strategy state with exchange state
+        log(f"🎯 Strategy decision - Current position: {self.position}")
         self.check_exchange_position_state()
             
         last = df.iloc[-1]
@@ -140,13 +163,32 @@ class LiveStrategy:
                 
         # Position reversal logic (no current position)
         elif self.position is None:
+            # Signal reversal from bearish to bullish
             if prev_signal == -1 and signal == 1:
                 action = 'BUY'
                 self.position = 'LONG'
                 self.entry_price = mark_price
                 order_size = self.get_order_size(capital, mark_price)
                 self.stop_loss = self.calculate_stop_loss(mark_price, supertrend_price, 'LONG', order_size)
+                log(f"📈 Signal reversal detected: BEARISH → BULLISH - Placing BUY order")
+            # Signal reversal from bullish to bearish
             elif prev_signal == 1 and signal == -1:
+                action = 'SELL'
+                self.position = 'SHORT'
+                self.entry_price = mark_price
+                order_size = self.get_order_size(capital, mark_price)
+                self.stop_loss = self.calculate_stop_loss(mark_price, supertrend_price, 'SHORT', order_size)
+                log(f"📉 Signal reversal detected: BULLISH → BEARISH - Placing SELL order")
+            # Same signal as previous - check if we should re-enter
+            elif signal == 1:
+                log(f"📊 Bullish signal continues but no position - considering re-entry")
+                action = 'BUY'
+                self.position = 'LONG'
+                self.entry_price = mark_price
+                order_size = self.get_order_size(capital, mark_price)
+                self.stop_loss = self.calculate_stop_loss(mark_price, supertrend_price, 'LONG', order_size)
+            elif signal == -1:
+                log(f"📊 Bearish signal continues but no position - considering re-entry")
                 action = 'SELL'
                 self.position = 'SHORT'
                 self.entry_price = mark_price
@@ -182,6 +224,12 @@ class LiveStrategy:
                 self.entry_price = mark_price
                 order_size = self.get_order_size(capital, mark_price)
                 self.stop_loss = self.calculate_stop_loss(mark_price, supertrend_price, 'LONG', order_size)
+        
+        # Log the final decision
+        if action:
+            log(f"✅ Strategy decision: {action} {self.position} {order_size} @ {mark_price:.2f} (SL: {self.stop_loss:.2f})")
+        else:
+            log(f"📊 No action - Position: {self.position}, Signal: {signal}, Prev Signal: {prev_signal}")
         
         return {
             'action': action,
