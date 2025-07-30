@@ -90,41 +90,89 @@ class DeltaExchangeBot:
         return headers, timestamp, message, signature
 
     def make_request(self, method: str, endpoint: str, params: Dict = None, data: Dict = None) -> Dict:
-        """Make authenticated API request"""
-        timestamp = str(int(time.time()))
-        path = f'/v2{endpoint}'
-        url = f'{self.base_url}{path}'
+        """Make authenticated API request with retry logic"""
+        max_retries = 3
+        retry_delay = 2
         
-        # Prepare body for signature
-        body = ""
-        if data:
-            body = json.dumps(data)
+        for attempt in range(max_retries):
+            try:
+                timestamp = str(int(time.time()))
+                path = endpoint
+                
+                if params:
+                    query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+                    path += f"?{query_string}"
+                
+                body = ""
+                if data:
+                    body = json.dumps(data)
+                
+                message = method + timestamp + path + body
+                signature = self.generate_signature(self.api_secret, message)
+                
+                headers = {
+                    "api-key": self.api_key,
+                    "timestamp": timestamp,
+                    "signature": signature,
+                    "Content-Type": "application/json"
+                }
+                
+                url = f"{self.base_url}{path}"
+                self.logger.info(f"API Request (attempt {attempt + 1}/{max_retries}): {method} {url}")
+                
+                if method == 'GET':
+                    response = requests.get(url, headers=headers, timeout=15)
+                elif method == 'POST':
+                    response = requests.post(url, headers=headers, json=data, timeout=15)
+                elif method == 'DELETE':
+                    response = requests.delete(url, headers=headers, timeout=15)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                
+                self.logger.info(f"Response status: {response.status_code}")
+                
+                # Handle different response status codes
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 504:
+                    # Gateway timeout - retry with exponential backoff
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt)
+                        self.logger.warning(f"504 Gateway Timeout, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        self.logger.error(f"504 Gateway Timeout after {max_retries} attempts")
+                        return {'success': False, 'error': f'504 Server Error: Gateway Timeout for url: {url}'}
+                elif response.status_code == 429:
+                    # Rate limit - wait longer
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (3 ** attempt)
+                        self.logger.warning(f"429 Rate Limited, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        self.logger.error(f"429 Rate Limited after {max_retries} attempts")
+                        return {'success': False, 'error': f'429 Rate Limited for url: {url}'}
+                else:
+                    # Other errors - don't retry
+                    self.logger.error(f"API request failed: {response.status_code} {response.text}")
+                    return {'success': False, 'error': f'{response.status_code} Client Error: {response.reason} for url: {url}'}
+                    
+            except requests.exceptions.Timeout:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    self.logger.warning(f"Request timeout, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    self.logger.error(f"Request timeout after {max_retries} attempts")
+                    return {'success': False, 'error': f'Request timeout for url: {url}'}
+            except Exception as e:
+                self.logger.error(f"Unexpected error in API request: {e}")
+                return {'success': False, 'error': str(e)}
         
-        # Create signature message (method + timestamp + path + body)
-        message = method + timestamp + path + body
-        signature = self.generate_signature(self.api_secret, message)
-        
-        headers = {
-            'api-key': self.api_key,
-            'timestamp': timestamp,
-            'signature': signature,
-            'Content-Type': 'application/json'
-        }
-        
-        try:
-            if method == 'GET':
-                response = requests.get(url, params=params, headers=headers, timeout=30)
-            elif method == 'POST':
-                response = requests.post(url, json=data, headers=headers, timeout=30)
-            elif method == 'DELETE':
-                response = requests.delete(url, json=data, headers=headers, timeout=30)
-            
-            response.raise_for_status()
-            return response.json()
-        
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"API request failed: {e}")
-            return {'success': False, 'error': str(e)}
+        return {'success': False, 'error': 'Max retries exceeded'}
 
     def get_ohlc_data(self, limit: int = 100) -> pd.DataFrame:
         """Fetch OHLC data from Delta Exchange (no authentication required)"""
@@ -602,13 +650,58 @@ class DeltaExchangeBot:
         finally:
             self.logger.info("SuperTrend Trading Bot shutdown")
 
+    def check_server_health(self) -> bool:
+        """Check if the server is responding properly"""
+        try:
+            # Try a simple market data request first (no auth required)
+            url = f"{self.live_base_url}/v2/history/candles"
+            params = {
+                'symbol': 'BTCUSD',
+                'resolution': '5m',
+                'limit': 1
+            }
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                self.logger.info("✅ Market data server is responding")
+                return True
+            else:
+                self.logger.warning(f"⚠️ Market data server issue: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Server health check failed: {e}")
+            return False
+
+    def log_server_status(self):
+        """Log current server configuration and status"""
+        self.logger.info(f"🔧 Server Configuration:")
+        self.logger.info(f"   Base URL: {self.base_url}")
+        self.logger.info(f"   Live Base URL: {self.live_base_url}")
+        self.logger.info(f"   Product ID: {self.product_id}")
+        self.logger.info(f"   Symbol: {self.symbol}")
+        
+        # Check server health
+        if self.check_server_health():
+            self.logger.info("✅ Server health check passed")
+        else:
+            self.logger.warning("⚠️ Server health check failed - consider switching to live environment")
+            self.logger.info("💡 To switch to live environment, set TRADING_FROM_LIVE = True in config.py")
+
 def main():
     """Main function to start the bot"""
+    bot = DeltaExchangeBot()
+    
+    # Log server status and health check
+    bot.log_server_status()
+    
     try:
-        bot = DeltaExchangeBot()
         bot.run()
+    except KeyboardInterrupt:
+        bot.logger.info("Bot stopped by user")
     except Exception as e:
-        print(f"Failed to start bot: {e}")
+        bot.logger.error(f"Unexpected error: {e}")
+        raise
 
 if __name__ == "__main__":
     main()

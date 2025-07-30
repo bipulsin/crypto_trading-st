@@ -5,7 +5,7 @@ try:
 except ImportError:
     pass
 
-TRADING_FROM_LIVE = False
+TRADING_FROM_LIVE = False  # Set to True if testnet has server issues (504 errors)
 
 # Live market data API parameters (for non-order related calls)
 LIVE_BASE_URL = 'https://api.india.delta.exchange' 
