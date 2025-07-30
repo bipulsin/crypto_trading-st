@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 import threading
 from typing import Dict, List, Optional, Tuple
-from config import BASE_URL, API_KEY, API_SECRET, SYMBOL_ID, SYMBOL
+from config import BASE_URL, API_KEY, API_SECRET, SYMBOL_ID, SYMBOL, LIVE_BASE_URL
 
 # Load environment variables
 load_dotenv()
@@ -19,7 +19,8 @@ load_dotenv()
 class DeltaExchangeBot:
     def __init__(self):
         # API Configuration - Use config values
-        self.base_url = BASE_URL
+        self.base_url = BASE_URL  # For trading operations (authenticated)
+        self.live_base_url = LIVE_BASE_URL  # For market data (no auth needed)
         self.api_key = API_KEY
         self.api_secret = API_SECRET
         
@@ -109,7 +110,7 @@ class DeltaExchangeBot:
             return {'success': False, 'error': str(e)}
 
     def get_ohlc_data(self, limit: int = 100) -> pd.DataFrame:
-        """Fetch OHLC data from Delta Exchange"""
+        """Fetch OHLC data from Delta Exchange (no authentication required)"""
         end_time = int(time.time())
         start_time = end_time - (limit * 5 * 60)  # 5 minutes per candle
         
@@ -120,23 +121,32 @@ class DeltaExchangeBot:
             'end': end_time
         }
         
-        response = self.make_request('GET', '/history/candles', params=params)
+        url = f"{self.live_base_url}/v2/history/candles"
         
-        if not response.get('success', False):
-            self.logger.error(f"Failed to fetch OHLC data: {response}")
+        try:
+            response = requests.get(url, params=params, timeout=20)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data.get('success', False):
+                self.logger.error(f"Failed to fetch OHLC data: {data}")
+                return pd.DataFrame()
+            
+            candle_data = data.get('result', [])
+            if not candle_data:
+                self.logger.warning("No OHLC data received")
+                return pd.DataFrame()
+            
+            df = pd.DataFrame(candle_data)
+            df['timestamp'] = pd.to_datetime(df['time'], unit='s')
+            df = df.sort_values('timestamp').reset_index(drop=True)
+            
+            self.logger.info(f"Fetched {len(df)} OHLC candles")
+            return df
+            
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Failed to fetch OHLC data: {e}")
             return pd.DataFrame()
-        
-        data = response.get('result', [])
-        if not data:
-            self.logger.warning("No OHLC data received")
-            return pd.DataFrame()
-        
-        df = pd.DataFrame(data)
-        df['timestamp'] = pd.to_datetime(df['time'], unit='s')
-        df = df.sort_values('timestamp').reset_index(drop=True)
-        
-        self.logger.info(f"Fetched {len(df)} OHLC candles")
-        return df
 
     def calculate_supertrend(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate SuperTrend indicator using pandas_ta"""
