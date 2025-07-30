@@ -72,6 +72,23 @@ class DeltaExchangeBot:
         """Generate HMAC signature for API authentication"""
         return hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
 
+    def sign_request(self, method, path, body=None):
+        """Sign request for trading operations (matches delta_api.py)"""
+        timestamp = str(int(time.time()))
+        if body is None:
+            body = ""
+        else:
+            body = json.dumps(body)
+        message = method + timestamp + path + body
+        signature = hmac.new(self.api_secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+        headers = {
+            "api-key": self.api_key,
+            "timestamp": timestamp,
+            "signature": signature,
+            "Content-Type": "application/json"
+        }
+        return headers, timestamp, message, signature
+
     def make_request(self, method: str, endpoint: str, params: Dict = None, data: Dict = None) -> Dict:
         """Make authenticated API request"""
         timestamp = str(int(time.time()))
@@ -212,35 +229,52 @@ class DeltaExchangeBot:
 
     def get_current_position(self) -> Optional[Dict]:
         """Get current position for BTCUSD"""
-        params = {'product_id': self.product_id}
-        response = self.make_request('GET', '/positions', params=params)
+        path = f"/v2/positions?product_id={self.product_id}"
+        headers, timestamp, message, signature = self.sign_request("GET", path)
         
-        if not response.get('success', False):
-            self.logger.error(f"Failed to fetch position: {response}")
+        try:
+            url = f"{self.base_url}{path}"
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data.get('success', False):
+                self.logger.error(f"Failed to fetch position: {data}")
+                return None
+            
+            position = data.get('result')
+            if position and position.get('size', 0) != 0:
+                self.logger.info(f"Current position: Size={position.get('size')}, Entry={position.get('entry_price')}")
+                return position
+            
             return None
-        
-        position = response.get('result')
-        if position and position.get('size', 0) != 0:
-            self.logger.info(f"Current position: Size={position.get('size')}, Entry={position.get('entry_price')}")
-            return position
-        
-        return None
+            
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Failed to fetch position: {e}")
+            return None
 
     def get_open_orders(self) -> List[Dict]:
         """Get open orders for BTCUSD"""
-        params = {
-            'product_ids': str(self.product_id),
-            'states': 'open,pending'
-        }
-        response = self.make_request('GET', '/orders', params=params)
+        path = f"/v2/orders?product_ids={self.product_id}&states=open,pending"
+        headers, timestamp, message, signature = self.sign_request("GET", path)
         
-        if not response.get('success', False):
-            self.logger.error(f"Failed to fetch orders: {response}")
+        try:
+            url = f"{self.base_url}{path}"
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data.get('success', False):
+                self.logger.error(f"Failed to fetch orders: {data}")
+                return []
+            
+            orders = data.get('result', [])
+            self.logger.info(f"Found {len(orders)} open orders")
+            return orders
+            
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Failed to fetch orders: {e}")
             return []
-        
-        orders = response.get('result', [])
-        self.logger.info(f"Found {len(orders)} open orders")
-        return orders
 
     def calculate_position_size(self, price: float, balance: float) -> int:
         """Calculate position size based on available balance"""
