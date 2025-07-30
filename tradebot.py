@@ -378,7 +378,7 @@ class DeltaExchangeBot:
                 'bracket_stop_trigger_method': 'mark_price'
             })
         
-        response = self.make_request('POST', '/orders', data=order_data)
+        response = self.make_request('POST', '/v2/orders', data=order_data)
         
         if response.get('success', False):
             order = response.get('result')
@@ -410,7 +410,7 @@ class DeltaExchangeBot:
             'reduce_only': 'true'
         }
         
-        response = self.make_request('POST', '/orders', data=order_data)
+        response = self.make_request('POST', '/v2/orders', data=order_data)
         
         if response.get('success', False):
             self.logger.info(f"Position closed: {side} {size} contracts")
@@ -426,7 +426,7 @@ class DeltaExchangeBot:
             'product_id': self.product_id
         }
         
-        response = self.make_request('DELETE', '/orders', data=order_data)
+        response = self.make_request('DELETE', '/v2/orders', data=order_data)
         
         if response.get('success', False):
             self.logger.info(f"Order {order_id} cancelled successfully")
