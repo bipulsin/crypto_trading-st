@@ -124,6 +124,8 @@ class DeltaExchangeBot:
                     response = requests.get(url, headers=headers, timeout=15)
                 elif method == 'POST':
                     response = requests.post(url, headers=headers, json=data, timeout=15)
+                elif method == 'PUT':
+                    response = requests.put(url, headers=headers, json=data, timeout=15)
                 elif method == 'DELETE':
                     response = requests.delete(url, headers=headers, timeout=15)
                 else:
@@ -434,28 +436,44 @@ class DeltaExchangeBot:
             return False
 
     def update_stop_loss(self, new_sl_price: float):
-        """Update stop loss for current position using bracket orders"""
-        position = self.get_current_position()
-        if not position:
-            self.logger.warning("No position found to update stop loss")
+        """Update stop loss for current position by modifying existing orders"""
+        # First, get current open orders
+        open_orders = self.get_open_orders()
+        if not open_orders:
+            self.logger.warning("No open orders found to update stop loss")
             return
         
-        # Create new bracket order for the position
-        bracket_data = {
-            'product_id': self.product_id,
-            'stop_loss_order': {
-                'order_type': 'market_order',
-                'stop_price': str(new_sl_price)
-            },
-            'bracket_stop_trigger_method': 'mark_price'
-        }
+        # Find orders that have stop loss (bracket orders)
+        orders_with_sl = [order for order in open_orders if order.get('stop_loss') is not None]
         
-        response = self.make_request('POST', '/orders/bracket', data=bracket_data)
+        if not orders_with_sl:
+            self.logger.warning("No orders with stop loss found to update")
+            return
         
-        if response.get('success', False):
-            self.logger.info(f"Stop loss updated to: {new_sl_price}")
+        # Update each order with stop loss
+        success_count = 0
+        for order in orders_with_sl:
+            order_id = order.get('id')
+            if not order_id:
+                continue
+                
+            # Update the order with new stop loss
+            update_data = {
+                'stop_loss': str(new_sl_price)
+            }
+            
+            response = self.make_request('PUT', f'/v2/orders/{order_id}', data=update_data)
+            
+            if response.get('success', False):
+                self.logger.info(f"Updated stop loss for order {order_id} to: {new_sl_price}")
+                success_count += 1
+            else:
+                self.logger.error(f"Failed to update stop loss for order {order_id}: {response}")
+        
+        if success_count > 0:
+            self.logger.info(f"Successfully updated stop loss for {success_count} orders to: {new_sl_price}")
         else:
-            self.logger.error(f"Failed to update stop loss: {response}")
+            self.logger.error("Failed to update stop loss for any orders")
 
     def execute_trading_logic(self, df: pd.DataFrame):
         """Main trading logic execution"""
