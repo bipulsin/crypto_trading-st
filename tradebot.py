@@ -229,13 +229,22 @@ class DeltaExchangeBot:
 
     def get_current_position(self) -> Optional[Dict]:
         """Get current position for BTCUSD"""
+        # Add small delay to prevent rate limiting
+        time.sleep(0.1)
+        
         path = f"/v2/positions?product_id={self.product_id}"
         headers, timestamp, message, signature = self.sign_request("GET", path)
         
         try:
             url = f"{self.base_url}{path}"
+            self.logger.info(f"Fetching position from: {url}")
             response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
+            
+            self.logger.info(f"Position response status: {response.status_code}")
+            if response.status_code != 200:
+                self.logger.error(f"Position response text: {response.text}")
+                return None
+                
             data = response.json()
             
             if not data.get('success', False):
@@ -255,13 +264,22 @@ class DeltaExchangeBot:
 
     def get_open_orders(self) -> List[Dict]:
         """Get open orders for BTCUSD"""
+        # Add small delay to prevent rate limiting
+        time.sleep(0.1)
+        
         path = f"/v2/orders?product_ids={self.product_id}&states=open,pending"
         headers, timestamp, message, signature = self.sign_request("GET", path)
         
         try:
             url = f"{self.base_url}{path}"
+            self.logger.info(f"Fetching orders from: {url}")
             response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
+            
+            self.logger.info(f"Orders response status: {response.status_code}")
+            if response.status_code != 200:
+                self.logger.error(f"Orders response text: {response.text}")
+                return []
+                
             data = response.json()
             
             if not data.get('success', False):
