@@ -456,7 +456,10 @@ class DeltaExchangeBot:
             return
         
         # Find orders that have stop loss (bracket orders)
-        orders_with_sl = [order for order in open_orders if order.get('stop_loss') is not None]
+        # Look for both 'stop_loss' and 'bracket_stop_loss_price' fields
+        orders_with_sl = [order for order in open_orders if 
+                         order.get('stop_loss') is not None or 
+                         order.get('bracket_stop_loss_price') is not None]
         
         if not orders_with_sl:
             self.logger.warning("No orders with stop loss found to update")
@@ -471,7 +474,8 @@ class DeltaExchangeBot:
                 
             # Update the order with new stop loss
             update_data = {
-                'stop_loss': str(new_sl_price)
+                'bracket_stop_loss_price': str(new_sl_price),
+                'bracket_stop_loss_limit_price': str(new_sl_price)
             }
             
             response = self.make_request('PUT', f'/v2/orders/{order_id}', data=update_data)
