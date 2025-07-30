@@ -261,7 +261,7 @@ class DeltaExchangeBot:
 
     def get_wallet_balance(self) -> float:
         """Get available wallet balance in USD"""
-        response = self.make_request('GET', '/wallet/balances')
+        response = self.make_request('GET', '/v2/wallet/balances')
         
         if not response.get('success', False):
             self.logger.error(f"Failed to fetch wallet balance: {response}")
