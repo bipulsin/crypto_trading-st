@@ -355,16 +355,20 @@ class DeltaExchangeBot:
         position_value = trade_amount * self.leverage
         
         # For Delta Exchange BTCUSD contracts:
-        # Each contract represents $1 of notional value
-        # So position_size = position_value (since each contract = $1)
-        position_size = int(position_value)
+        # 1 lot = 0.001 BTC
+        # Position size in lots = position_value / (price * 0.001)
+        # This gives us the number of 0.001 BTC lots we can buy with our position value
+        position_size = int(position_value / (price * 0.001))
         
-        # Minimum position size is 1 contract
+        # Minimum position size is 1 lot
         position_size = max(1, position_size)
+        
+        # Calculate actual notional value
+        actual_notional = position_size * price * 0.001
         
         self.logger.info(f"Balance: ${balance:.2f}, Trade amount (50%): ${trade_amount:.2f}")
         self.logger.info(f"Position value with {self.leverage}x leverage: ${position_value:.2f}")
-        self.logger.info(f"Calculated position size: {position_size} contracts (${position_size:.2f} notional value)")
+        self.logger.info(f"Calculated position size: {position_size} lots (${actual_notional:.2f} notional value)")
         return position_size
 
     def place_market_order(self, side: str, size: int, stop_loss: float = None, take_profit: float = None) -> Optional[Dict]:
