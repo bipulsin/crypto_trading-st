@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 import threading
 from typing import Dict, List, Optional, Tuple
-from config import BASE_URL, API_KEY, API_SECRET, SYMBOL_ID, SYMBOL, LIVE_BASE_URL
+from config import BASE_URL, API_KEY, API_SECRET, SYMBOL_ID, SYMBOL, LIVE_BASE_URL, LEVERAGE
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +37,7 @@ class DeltaExchangeBot:
         self.position_size_pct = 0.5  # 50% of available balance
         self.take_profit_multiplier = 1.5  # 1.5x risk-reward
         self.max_loss_pct = 0.3  # 30% max loss of position
+        self.leverage = LEVERAGE  # Use leverage from config
         
         # State Management
         self.current_position = None
@@ -345,18 +346,24 @@ class DeltaExchangeBot:
             return []
 
     def calculate_position_size(self, price: float, balance: float) -> int:
-        """Calculate position size based on available balance"""
+        """Calculate position size based on available balance with leverage"""
         # Use 50% of available balance
         trade_amount = balance * self.position_size_pct
         
-        # BTCUSD contract value is 0.001 BTC per contract
-        # Position size = trade_amount / price (since we're trading in USD)
-        position_size = int(trade_amount / price)
+        # With 50x leverage, we can control 50x more value than our capital
+        # Position value = trade_amount * leverage
+        position_value = trade_amount * self.leverage
+        
+        # Position size = position_value / price (since we're trading in USD)
+        # Each contract represents $1 of notional value at 50x leverage
+        position_size = int(position_value / price)
         
         # Minimum position size is 1 contract
         position_size = max(1, position_size)
         
-        self.logger.info(f"Calculated position size: {position_size} contracts for ${trade_amount:.2f}")
+        self.logger.info(f"Balance: ${balance:.2f}, Trade amount (50%): ${trade_amount:.2f}")
+        self.logger.info(f"Position value with {self.leverage}x leverage: ${position_value:.2f}")
+        self.logger.info(f"Calculated position size: {position_size} contracts at price ${price:.2f}")
         return position_size
 
     def place_market_order(self, side: str, size: int, stop_loss: float = None, take_profit: float = None) -> Optional[Dict]:
