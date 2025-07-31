@@ -1,5 +1,7 @@
 requests
 pandas
+numpy<2.0
 pandas_ta
 websocket-client
 python-dotenv
+setuptools
