@@ -403,13 +403,22 @@ class DeltaExchangeBot:
             trailing_distance = abs(current_price - stop_loss)
             
             order_data.update({
-                'bracket_stop_loss_price': str(stop_loss),
-                'bracket_stop_loss_limit_price': str(stop_loss),
-                'bracket_take_profit_price': str(take_profit),
-                'bracket_take_profit_limit_price': str(take_profit),
-                'bracket_stop_trigger_method': 'mark_price',
-                'bracket_stop_loss_trailing': True,  # Enable native trailing stop loss
-                'bracket_stop_loss_trailing_distance': trailing_distance,  # Dynamic trailing distance
+                # 'bracket_stop_loss_price': str(stop_loss),
+                # 'bracket_stop_loss_limit_price': str(stop_loss),
+                # 'bracket_take_profit_price': str(take_profit),
+                # 'bracket_take_profit_limit_price': str(take_profit),
+                # 'bracket_stop_trigger_method': 'mark_price',
+                # 'bracket_stop_loss_trailing': True,  # Enable native trailing stop loss
+                # 'bracket_stop_loss_trailing_distance': trailing_distance,  # Dynamic trailing distance
+
+#-----------------------changed by Bipul
+                # Bracket trailing stop loss parameters
+                "bracket_trail_amount": str(trailing_distance),
+                "bracket_stop_trigger_method": "mark_price",
+                # Bracket take profit parameters  
+                "bracket_take_profit_price": str(take_profit),
+                "bracket_take_profit_limit_price": str(take_profit)  # Market order for TP
+#--------------------------------
             })
             self.logger.info(f"Placing bracket order with trailing stop loss distance: {trailing_distance}")
         
