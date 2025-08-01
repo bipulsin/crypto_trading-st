@@ -402,6 +402,12 @@ class DeltaExchangeBot:
             # Calculate trailing distance based on difference between current price and supertrend
             trailing_distance = abs(current_price - stop_loss)
             
+            # Make trailing amount negative for buy orders, positive for sell orders
+            if side == 'buy':
+                bracket_trail_amount = -trailing_distance
+            else:  # sell
+                bracket_trail_amount = trailing_distance
+            
             order_data.update({
                 # 'bracket_stop_loss_price': str(stop_loss),
                 # 'bracket_stop_loss_limit_price': str(stop_loss),
@@ -413,14 +419,14 @@ class DeltaExchangeBot:
 
 #-----------------------changed by Bipul
                 # Bracket trailing stop loss parameters
-                "bracket_trail_amount": str(trailing_distance),
+                "bracket_trail_amount": str(bracket_trail_amount),
                 "bracket_stop_trigger_method": "mark_price",
                 # Bracket take profit parameters  
                 "bracket_take_profit_price": str(take_profit),
                 "bracket_take_profit_limit_price": str(take_profit)  # Market order for TP
 #--------------------------------
             })
-            self.logger.info(f"Placing bracket order with trailing stop loss distance: {trailing_distance}")
+            self.logger.info(f"Placing bracket order with trailing stop loss distance: {trailing_distance} (trail amount: {bracket_trail_amount})")
         
         # Validate order data before sending
         if not self.validate_order_data(order_data):
