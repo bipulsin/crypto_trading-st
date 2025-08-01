@@ -652,8 +652,7 @@ class DeltaExchangeBot:
         else:
             # Case 3: No position exists
             if not open_orders:
-                
-                # Place new order based on SuperTrend direction
+                # Case 3a: No position and no orders - Place new order based on SuperTrend direction
                 balance = self.get_wallet_balance()
                 if balance > 0:
                     size = self.calculate_position_size(current_price, balance)
@@ -677,46 +676,26 @@ class DeltaExchangeBot:
                         self.logger.error("Failed to place bracket order")
             
             else:
-                # Case 4: Check for order timeout (3 iterations) or cancel existing orders
-                self.logger.info(f"Found {len(open_orders)} existing orders. Checking for timeouts or cancelling to place new bracket orders.")
+                # Case 3b: No position but existing orders - Skip placing new orders
+                # Let existing orders handle the trading, only monitor for timeouts
+                self.logger.info(f"Found {len(open_orders)} existing orders but no position. Monitoring existing orders.")
                 
-                # Cancel all existing orders to allow new bracket orders
+                # Only check for order timeouts, don't place new orders
                 for order in open_orders:
                     order_id = order['id']
-                    self.logger.info(f"Cancelling existing order {order_id} to place new bracket order")
-                    
-                    if self.cancel_order(order_id):
-                        self.logger.info(f"Successfully cancelled order {order_id}")
-                        if order_id in self.order_timeout_counter:
-                            del self.order_timeout_counter[order_id]
+                    if order_id in self.order_timeout_counter:
+                        self.order_timeout_counter[order_id] += 1
+                        
+                        if self.order_timeout_counter[order_id] >= 3:
+                            self.logger.info(f"Order {order_id} timeout reached. Cancelling order.")
+                            
+                            if self.cancel_order(order_id):
+                                self.logger.info(f"Successfully cancelled timed out order {order_id}")
+                                del self.order_timeout_counter[order_id]
+                            else:
+                                self.logger.warning(f"Failed to cancel timed out order {order_id}")
                     else:
-                        self.logger.warning(f"Failed to cancel order {order_id}")
-                
-                # Wait a moment for orders to be cancelled
-                time.sleep(2)
-                
-                # Now try to place new bracket order
-                balance = self.get_wallet_balance()
-                if balance > 0:
-                    size = self.calculate_position_size(current_price, balance)
-                    side = 'buy' if current_trend == 1 else 'sell'
-                    
-                    # Calculate SL and TP
-                    if current_trend == 1:  # Bullish
-                        stop_loss = supertrend_value
-                        risk = current_price - stop_loss
-                        take_profit = current_price + (risk * self.take_profit_multiplier)
-                    else:  # Bearish
-                        stop_loss = supertrend_value
-                        risk = stop_loss - current_price
-                        take_profit = current_price - (risk * self.take_profit_multiplier)
-                    
-                    self.logger.info(f"Placing new {side} bracket order after cancelling existing orders")
-                    new_order = self.place_market_order(side, size, stop_loss, take_profit, current_price)
-                    if new_order:
-                        self.order_timeout_counter[new_order['id']] = 0
-                    else:
-                        self.logger.error("Failed to place bracket order after cancelling existing orders")
+                        self.order_timeout_counter[order_id] = 0
 
     def run_iteration(self):
         """Run single trading iteration"""
