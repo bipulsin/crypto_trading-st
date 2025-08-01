@@ -445,10 +445,34 @@ class DeltaExchangeBot:
             
             return order
         else:
-            self.logger.error(f"Failed to place order: {response}")
-            # Log the order data that failed
-            self.logger.error(f"Failed order data: {order_data}")
-            return None
+            # Check for bracket order position exists error
+            error_msg = str(response)
+            if 'bracket_order_position_exists' in error_msg:
+                self.logger.warning("Bracket order failed - position may exist. Trying simple market order...")
+                
+                # Try placing simple market order without bracket orders
+                simple_order_data = {
+                    'product_id': self.product_id,
+                    'size': size,
+                    'side': side,
+                    'order_type': 'market_order'
+                }
+                
+                simple_response = self.make_request('POST', '/v2/orders', data=simple_order_data)
+                
+                if simple_response.get('success', False):
+                    order = simple_response.get('result')
+                    self.logger.info(f"Simple market order placed successfully: {side} {size} contracts")
+                    self.logger.warning("Bracket orders not available - position may already exist")
+                    return order
+                else:
+                    self.logger.error(f"Failed to place simple market order: {simple_response}")
+                    return None
+            else:
+                self.logger.error(f"Failed to place order: {response}")
+                # Log the order data that failed
+                self.logger.error(f"Failed order data: {order_data}")
+                return None
 
 
 
@@ -653,51 +677,46 @@ class DeltaExchangeBot:
                         self.logger.error("Failed to place bracket order")
             
             else:
-                # Case 4: Check for order timeout (3 iterations)
+                # Case 4: Check for order timeout (3 iterations) or cancel existing orders
+                self.logger.info(f"Found {len(open_orders)} existing orders. Checking for timeouts or cancelling to place new bracket orders.")
+                
+                # Cancel all existing orders to allow new bracket orders
                 for order in open_orders:
                     order_id = order['id']
-                    if order_id in self.order_timeout_counter:
-                        self.order_timeout_counter[order_id] += 1
-                        
-                        if self.order_timeout_counter[order_id] >= 3:
-                            self.logger.info(f"Order {order_id} timeout reached. Cancelling and placing new order.")
-                            
-                            if self.cancel_order(order_id):
-                                time.sleep(1)
-                                
-                                # Double-check position before placing new order
-                                position_check = self.get_current_position()
-                                if position_check:
-                                    self.logger.warning("Position exists after order cancellation, skipping new order placement")
-                                    del self.order_timeout_counter[order_id]
-                                    continue
-                                
-                                # Place new order at current market price
-                                balance = self.get_wallet_balance()
-                                if balance > 0:
-                                    size = self.calculate_position_size(current_price, balance)
-                                    side = 'buy' if current_trend == 1 else 'sell'
-                                    
-                                    # Calculate SL and TP
-                                    if current_trend == 1:  # Bullish
-                                        stop_loss = supertrend_value
-                                        risk = current_price - stop_loss
-                                        take_profit = current_price + (risk * self.take_profit_multiplier)
-                                    else:  # Bearish
-                                        stop_loss = supertrend_value
-                                        risk = stop_loss - current_price
-                                        take_profit = current_price - (risk * self.take_profit_multiplier)
-                                    
-                                    new_order = self.place_market_order(side, size, stop_loss, take_profit, current_price)
-                                    if new_order:
-                                        self.order_timeout_counter[new_order['id']] = 0
-                                    else:
-                                        self.logger.error("Failed to place bracket order after timeout")
-                            
-                            # Remove old order from timeout counter
+                    self.logger.info(f"Cancelling existing order {order_id} to place new bracket order")
+                    
+                    if self.cancel_order(order_id):
+                        self.logger.info(f"Successfully cancelled order {order_id}")
+                        if order_id in self.order_timeout_counter:
                             del self.order_timeout_counter[order_id]
                     else:
-                        self.order_timeout_counter[order_id] = 0
+                        self.logger.warning(f"Failed to cancel order {order_id}")
+                
+                # Wait a moment for orders to be cancelled
+                time.sleep(2)
+                
+                # Now try to place new bracket order
+                balance = self.get_wallet_balance()
+                if balance > 0:
+                    size = self.calculate_position_size(current_price, balance)
+                    side = 'buy' if current_trend == 1 else 'sell'
+                    
+                    # Calculate SL and TP
+                    if current_trend == 1:  # Bullish
+                        stop_loss = supertrend_value
+                        risk = current_price - stop_loss
+                        take_profit = current_price + (risk * self.take_profit_multiplier)
+                    else:  # Bearish
+                        stop_loss = supertrend_value
+                        risk = stop_loss - current_price
+                        take_profit = current_price - (risk * self.take_profit_multiplier)
+                    
+                    self.logger.info(f"Placing new {side} bracket order after cancelling existing orders")
+                    new_order = self.place_market_order(side, size, stop_loss, take_profit, current_price)
+                    if new_order:
+                        self.order_timeout_counter[new_order['id']] = 0
+                    else:
+                        self.logger.error("Failed to place bracket order after cancelling existing orders")
 
     def run_iteration(self):
         """Run single trading iteration"""
