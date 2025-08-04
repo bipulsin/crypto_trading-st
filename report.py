@@ -260,6 +260,13 @@ def process_fills_to_trades(df):
                         # Calculate P&L
                         pnl = net_cashflow - total_fees
                         
+                        # Calculate entry and exit prices
+                        entry_price = entry_cashflow / trade_qty if trade_qty > 0 else 0
+                        exit_price = exit_cashflow / trade_qty if trade_qty > 0 else 0
+                        
+                        # Calculate duration in hours
+                        duration = (close_sell['Time'] - open_buy['Time']).total_seconds() / 3600
+                        
                         trade = {
                             'Entry Time': open_buy['Time'],
                             'Exit Time': close_sell['Time'],
@@ -268,13 +275,13 @@ def process_fills_to_trades(df):
                             'Entry Side': open_buy['Order Side'],
                             'Exit Side': close_sell['Order Side'],
                             'Side': 'Long',
-                            'Quantity': trade_qty,
-                            'Entry Price': entry_cashflow / trade_qty if trade_qty > 0 else 0,
-                            'Exit Price': exit_cashflow / trade_qty if trade_qty > 0 else 0,
-                            'Cashflow': net_cashflow,
-                            'Trading Fees': total_fees,
-                            'Realised P&L': pnl,
-                            'Duration': (close_sell['Time'] - open_buy['Time']).total_seconds() / 3600  # hours
+                            'Quantity': round(trade_qty, 2),
+                            'Entry Price': round(entry_price, 2),
+                            'Exit Price': round(exit_price, 2),
+                            'Cashflow': round(net_cashflow, 2),
+                            'Trading Fees': round(total_fees, 2),
+                            'Realised P&L': round(pnl, 2),
+                            'Duration': round(duration, 2)
                         }
                         
                         trades.append(trade)
@@ -338,6 +345,13 @@ def process_fills_to_trades(df):
                         # Calculate P&L
                         pnl = net_cashflow - total_fees
                         
+                        # Calculate entry and exit prices
+                        entry_price = entry_cashflow / trade_qty if trade_qty > 0 else 0
+                        exit_price = exit_cashflow / trade_qty if trade_qty > 0 else 0
+                        
+                        # Calculate duration in hours
+                        duration = (close_buy['Time'] - open_sell['Time']).total_seconds() / 3600
+                        
                         trade = {
                             'Entry Time': open_sell['Time'],
                             'Exit Time': close_buy['Time'],
@@ -346,13 +360,13 @@ def process_fills_to_trades(df):
                             'Entry Side': open_sell['Order Side'],
                             'Exit Side': close_buy['Order Side'],
                             'Side': 'Short',
-                            'Quantity': trade_qty,
-                            'Entry Price': entry_cashflow / trade_qty if trade_qty > 0 else 0,
-                            'Exit Price': exit_cashflow / trade_qty if trade_qty > 0 else 0,
-                            'Cashflow': net_cashflow,
-                            'Trading Fees': total_fees,
-                            'Realised P&L': pnl,
-                            'Duration': (close_buy['Time'] - open_sell['Time']).total_seconds() / 3600  # hours
+                            'Quantity': round(trade_qty, 2),
+                            'Entry Price': round(entry_price, 2),
+                            'Exit Price': round(exit_price, 2),
+                            'Cashflow': round(net_cashflow, 2),
+                            'Trading Fees': round(total_fees, 2),
+                            'Realised P&L': round(pnl, 2),
+                            'Duration': round(duration, 2)
                         }
                         
                         trades.append(trade)
@@ -368,6 +382,12 @@ def process_fills_to_trades(df):
             return pd.DataFrame()
         
         trades_df = pd.DataFrame(trades)
+        
+        # Format all numeric columns to 2 decimal places
+        numeric_columns = ['Quantity', 'Entry Price', 'Exit Price', 'Cashflow', 'Trading Fees', 'Realised P&L', 'Duration']
+        for col in numeric_columns:
+            if col in trades_df.columns:
+                trades_df[col] = trades_df[col].round(2)
         
         # Calculate statistics
         total_trades = len(trades_df)
@@ -434,10 +454,32 @@ def download_and_process_trades():
         trades_df = process_fills_to_trades(df)
         
         if not trades_df.empty:
-            # Save processed trades to CSV
+            # Save processed trades to CSV with proper formatting
             filename = 'trades_report.csv'
-            trades_df.to_csv(filename, index=False)
+            
+            # Ensure all numeric columns are formatted to 2 decimal places
+            numeric_columns = ['Quantity', 'Entry Price', 'Exit Price', 'Cashflow', 'Trading Fees', 'Realised P&L', 'Duration']
+            for col in numeric_columns:
+                if col in trades_df.columns:
+                    trades_df[col] = trades_df[col].round(2)
+            
+            # Save with float_format to ensure 2 decimal places
+            trades_df.to_csv(filename, index=False, float_format='%.2f')
             logger.info(f"Trades report saved to: {filename}")
+            
+            # Log the column names to verify all required fields are present
+            logger.info(f"CSV columns: {list(trades_df.columns)}")
+            
+            # Log a sample row to verify formatting
+            if not trades_df.empty:
+                sample_row = trades_df.iloc[0]
+                logger.info("Sample trade data:")
+                logger.info(f"  Entry Price: {sample_row['Entry Price']:.2f}")
+                logger.info(f"  Exit Price: {sample_row['Exit Price']:.2f}")
+                logger.info(f"  Cashflow: {sample_row['Cashflow']:.2f}")
+                logger.info(f"  Trading Fees: {sample_row['Trading Fees']:.2f}")
+                logger.info(f"  Realised P&L: {sample_row['Realised P&L']:.2f}")
+                logger.info(f"  Duration: {sample_row['Duration']:.2f}")
         
         return trades_df
         
