@@ -1,23 +1,22 @@
 import requests
-import os
+from logger import get_logger
 
-# You can set your API key and secret here or use environment variables
-API_KEY = os.getenv('DELTA_API_KEY_TEST', 'YOUR_API_KEY')
-API_SECRET = os.getenv('DELTA_API_SECRET_TEST', 'YOUR_API_SECRET')
-BASE_URL = 'https://cdn-ind.testnet.deltaex.org'
+# Set up logger
+logger = get_logger('check_delta_orders', 'logs/check_delta_orders.log')
 
-url = f"{BASE_URL}/v2/orders"
-headers = {
-    'Content-Type': 'application/json',
-    # Add authentication headers if required by the API
-    # 'api-key': API_KEY,
-    # 'api-signature': '...',
-    # 'api-request-expiry': '...',
-}
+def check_orders():
+    """Check current orders on Delta exchange"""
+    try:
+        url = "https://api.delta.exchange/v2/orders"
+        response = requests.get(url)
+        
+        logger.info("Status code:", response.status_code)
+        logger.info("Response:", response.text)
+        
+        return response.json()
+    except Exception as e:
+        logger.error("Error:", e)
+        return None
 
-try:
-    response = requests.get(url, headers=headers)
-    print("Status code:", response.status_code)
-    print("Response:", response.text)
-except Exception as e:
-    print("Error:", e) 
+if __name__ == "__main__":
+    check_orders() 

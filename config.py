@@ -87,3 +87,6 @@ ENABLE_FLEXIBLE_ENTRY = False  # Allow new orders anytime (not just at candle cl
 
 # Position closure behavior
 ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE = True  # Only allow new positions at candle close after position closure
+
+# SuperTrend trailing stop configuration
+ST_WITH_TRAILING = True  # Enable trailing stop loss for SuperTrend strategy

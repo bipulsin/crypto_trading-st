@@ -7,6 +7,10 @@ import time
 import hmac
 import hashlib
 import json
+from logger import get_logger
+
+# Set up logger
+logger = get_logger('test_api_permissions', 'logs/test_api_permissions.log')
 
 BASE_URL = "https://cdn-ind.testnet.deltaex.org"
 API_KEY = "Dif1lSZl16ibEVhqKboD1UkQ5Z4qD7"
@@ -37,11 +41,11 @@ def print_time_diff(local_ts, server_time):
         local_ts = int(local_ts)
         server_time = int(server_time)
         diff = abs(server_time - local_ts) / 1000.0
-        print(f"   [DEBUG] Local timestamp: {local_ts}, Server time: {server_time}, Diff: {diff:.3f} seconds")
+        logger.debug(f"   [DEBUG] Local timestamp: {local_ts}, Server time: {server_time}, Diff: {diff:.3f} seconds")
         if diff > MAX_TIME_DIFF:
-            print(f"   [WARNING] Clock difference is more than {MAX_TIME_DIFF} seconds! Please sync your system clock.")
+            logger.warning(f"   [WARNING] Clock difference is more than {MAX_TIME_DIFF} seconds! Please sync your system clock.")
     except Exception as e:
-        print(f"   [DEBUG] Could not compute time diff: {e}")
+        logger.debug(f"   [DEBUG] Could not compute time diff: {e}")
 
 def timed_request(func, *args, **kwargs):
     start = time.time()
@@ -93,51 +97,48 @@ def place_bracket_order(order_size, current_price):
     return r.json()
 
 def main():
-    print("=== Testing API Key Permissions & Performance (REST API) ===\n")
+    logger.info("=== Testing API Key Permissions & Performance (REST API) ===\n")
 
     # 1. Public Endpoint
-    print("1. Testing Public Endpoint:")
+    logger.info("1. Testing Public Endpoint:")
     _, elapsed, error = timed_request(requests.get, f"{BASE_URL}/v2/tickers/{PROD_ID}")
-    if not error:
-        print(f"   ✅ get_ticker: SUCCESS ({elapsed:.3f}s)")
+    if error is None:
+        logger.info(f"   ✅ get_ticker: SUCCESS ({elapsed:.3f}s)")
     else:
-        print(f"   ❌ get_ticker: FAILED - {error} ({elapsed:.3f}s)")
+        logger.error(f"   ❌ get_ticker: FAILED - {error} ({elapsed:.3f}s)")
 
-    # 2. Private Endpoint: Wallet Balance
-    print("\n2. Testing Private Endpoint (Wallet Balance):")
+    # 2. Private Endpoint (Wallet Balance)
+    logger.info("\n2. Testing Private Endpoint (Wallet Balance):")
     try:
         balance, elapsed, error = timed_request(get_wallet_balance)
-        if not error:
-            print(f"   ✅ get_balances: SUCCESS - USD balance: {balance} ({elapsed:.3f}s)")
+        if error is None:
+            logger.info(f"   ✅ get_balances: SUCCESS - USD balance: {balance} ({elapsed:.3f}s)")
         else:
-            print(f"   ❌ get_balances: FAILED - {error} ({elapsed:.3f}s)")
+            logger.error(f"   ❌ get_balances: FAILED - {error} ({elapsed:.3f}s)")
     except Exception as e:
-        print(f"   ❌ get_balances: FAILED - {e}")
+        logger.error(f"   ❌ get_balances: FAILED - {e}")
 
-    # 3. Trading Endpoint: Place Bracket Order
-    print("\n3. Testing Trading Endpoint (Bracket Order):")
+    # 3. Trading Endpoint (Bracket Order)
+    logger.info("\n3. Testing Trading Endpoint (Bracket Order):")
     try:
         wallet_balance = get_wallet_balance()
         current_price = get_current_price()
         leverage = 50
-        if current_price > 0:
-            order_size = int((0.5 * wallet_balance * leverage / current_price) * 1000)
-        else:
-            order_size = 10
-        if order_size < 1:
-            order_size = 1
-        print(f"   Wallet balance: {wallet_balance}, Current price: {current_price}, Leverage: {leverage}")
-        print(f"   Calculated order size: {order_size} lots")
+        order_size = (wallet_balance * leverage) / current_price
+        
+        logger.info(f"   Wallet balance: {wallet_balance}, Current price: {current_price}, Leverage: {leverage}")
+        logger.info(f"   Calculated order size: {order_size} lots")
+        
         result, elapsed, error = timed_request(place_bracket_order, order_size, current_price)
-        if not error:
-            stop_order_id = result.get("result", {}).get("id", "N/A")
-            print(f"   ✅ place_order (bracket): SUCCESS - Stop Order ID: {stop_order_id} ({elapsed:.3f}s)")
+        if error is None and result.get("success"):
+            stop_order_id = result["result"]["id"]
+            logger.info(f"   ✅ place_order (bracket): SUCCESS - Stop Order ID: {stop_order_id} ({elapsed:.3f}s)")
         else:
-            print(f"   ❌ place_order: FAILED - {error} ({elapsed:.3f}s)")
-            if hasattr(error, 'response') and error.response is not None:
-                print(f"   Response: {error.response.text}")
+            logger.error(f"   ❌ place_order: FAILED - {error} ({elapsed:.3f}s)")
+            if hasattr(error, 'response'):
+                logger.error(f"   Response: {error.response.text}")
     except Exception as e:
-        print(f"   ❌ place_order: FAILED - {e}")
+        logger.error(f"   ❌ place_order: FAILED - {e}")
 
 if __name__ == "__main__":
     main() 

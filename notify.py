@@ -1,16 +1,30 @@
 import smtplib
 from email.mime.text import MIMEText
-from config import EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS, EMAIL_TO
+from email.mime.multipart import MIMEMultipart
+from logger import get_logger
 
-def send_trade_email(subject, body):
-    msg = MIMEText(body)
-    msg['Subject'] = subject
-    msg['From'] = EMAIL_USER
-    msg['To'] = EMAIL_TO
+# Set up logger
+logger = get_logger('notify', 'logs/notify.log')
+
+def send_email(subject, message, to_email="your-email@example.com"):
+    """Send email notification"""
     try:
-        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT) as server:
-            server.login(EMAIL_USER, EMAIL_PASS)
-            server.sendmail(EMAIL_USER, [EMAIL_TO], msg.as_string())
-        print(f"Email sent: {subject}")
+        msg = MIMEMultipart()
+        msg['From'] = "your-email@example.com"
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(message, 'plain'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login("your-email@example.com", "your-app-password")
+        text = msg.as_string()
+        server.sendmail("your-email@example.com", to_email, text)
+        server.quit()
+        
+        logger.info(f"Email sent: {subject}")
+        return True
     except Exception as e:
-        print(f"Failed to send email: {e}") 
+        logger.error(f"Failed to send email: {e}")
+        return False 
