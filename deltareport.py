@@ -54,7 +54,7 @@ def get_all_closed_orders(product_id=None, max_orders=10000):
     try:
         all_orders = []
         offset = 0
-        limit = 100
+        limit = 10  # API seems to return max 10 orders per request
         
         logger.info(f"Fetching closed orders for product_id: {product_id}")
         
@@ -72,6 +72,9 @@ def get_all_closed_orders(product_id=None, max_orders=10000):
             
             if r.status_code != 200:
                 logger.error(f"API Error: {r.status_code} - {r.text}")
+                if r.status_code == 500:
+                    logger.warning("Server error (500) - stopping pagination")
+                    break
                 break
             
             data = r.json()
@@ -239,7 +242,19 @@ def pair_trades(orders):
         pd.DataFrame: DataFrame with paired trades
     """
     try:
+        if not orders:
+            logger.warning("No orders provided")
+            return pd.DataFrame()
+        
         df = pd.DataFrame(orders)
+        
+        # Validate required columns exist
+        required_columns = ['id', 'side', 'size', 'average_fill_price', 'created_at']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            logger.error(f"Missing required columns: {missing_columns}")
+            logger.info(f"Available columns: {list(df.columns)}")
+            return pd.DataFrame()
         
         # Filter out cancelled orders (those with None average_fill_price)
         df = df[df['average_fill_price'].notna()].copy()
@@ -257,13 +272,23 @@ def pair_trades(orders):
         logger.info("Sample order classification:")
         sample_orders = df.head(5)
         for idx, order in sample_orders.iterrows():
-            logger.info(f"  Order {order.get('id', 'unknown')}: side={order.get('side', 'unknown')}, "
-                       f"order_type={order.get('order_type', 'unknown')}, "
-                       f"classified_as={order['order_side']}")
+            order_id = order.get('id', 'unknown') if hasattr(order, 'get') else order['id']
+            side = order.get('side', 'unknown') if hasattr(order, 'get') else order['side']
+            order_type = order.get('order_type', 'unknown') if hasattr(order, 'get') else order['order_type']
+            classified_as = order['order_side']
+            logger.info(f"  Order {order_id}: side={side}, order_type={order_type}, classified_as={classified_as}")
         
-        # Parse datetime
-        df['created_at'] = pd.to_datetime(df['created_at'], errors='coerce')
-        df = df.dropna(subset=['created_at'])
+        # Parse datetime with error handling
+        try:
+            df['created_at'] = pd.to_datetime(df['created_at'], errors='coerce')
+            df = df.dropna(subset=['created_at'])
+        except Exception as e:
+            logger.error(f"Error parsing datetime: {e}")
+            return pd.DataFrame()
+        
+        if df.empty:
+            logger.warning("No orders with valid datetime after parsing")
+            return pd.DataFrame()
         
         # Sort by creation time
         df = df.sort_values('created_at').reset_index(drop=True)
@@ -297,7 +322,7 @@ def pair_trades(orders):
                 mid_point = len(df_sorted) // 2
                 
                 for idx, order in df_sorted.iterrows():
-                    side = order.get('side', '').lower()
+                    side = order.get('side', '').lower() if hasattr(order, 'get') else order['side'].lower()
                     if idx < mid_point:
                         # First half - entries
                         if side == 'buy':
@@ -330,7 +355,7 @@ def pair_trades(orders):
                     logger.info("More sell orders - assuming closing long positions")
                     # Classify buy orders as entries, sell orders as exits
                     for idx, order in df_sorted.iterrows():
-                        side = order.get('side', '').lower()
+                        side = order.get('side', '').lower() if hasattr(order, 'get') else order['side'].lower()
                         if side == 'buy':
                             df_sorted.loc[idx, 'order_side'] = 'Open Buy'
                         else:
@@ -339,7 +364,7 @@ def pair_trades(orders):
                     logger.info("More buy orders - assuming closing short positions")
                     # Classify sell orders as entries, buy orders as exits
                     for idx, order in df_sorted.iterrows():
-                        side = order.get('side', '').lower()
+                        side = order.get('side', '').lower() if hasattr(order, 'get') else order['side'].lower()
                         if side == 'sell':
                             df_sorted.loc[idx, 'order_side'] = 'Open Sell'
                         else:
@@ -352,6 +377,9 @@ def pair_trades(orders):
                 logger.info(f"  Close Sell: {len(df[df['order_side'] == 'Close Sell'])}")
                 logger.info(f"  Open Sell: {len(df[df['order_side'] == 'Open Sell'])}")
                 logger.info(f"  Close Buy: {len(df[df['order_side'] == 'Close Buy'])}")
+        
+        # Save processed orders to CSV
+        save_processed_orders_to_csv(df, "processed_orders_data.csv")
         
         trades = []
         processed_indices = set()
@@ -389,56 +417,69 @@ def pair_trades(orders):
                         logger.warning(f"Skipping invalid pair: Exit time {close_sell['created_at']} <= Entry time {open_buy_time}")
                         continue
                     
-                    # Calculate trade metrics
-                    entry_qty = float(open_buy['filled_size'])
-                    exit_qty = float(close_sell['filled_size'])
-                    trade_qty = min(entry_qty, exit_qty)
-                    
-                    entry_price = float(open_buy['average_fill_price'])
-                    exit_price = float(close_sell['average_fill_price'])
-                    
-                    # Calculate cashflow (notional value)
-                    entry_cashflow = entry_price * trade_qty
-                    exit_cashflow = exit_price * trade_qty
-                    net_cashflow = exit_cashflow - entry_cashflow
-                    
-                    # Calculate fees
-                    entry_fees = float(open_buy.get('fee', 0))
-                    exit_fees = float(close_sell.get('fee', 0))
-                    total_fees = entry_fees + exit_fees
-                    
-                    # Calculate P&L
-                    pnl = net_cashflow - total_fees
-                    
-                    # Calculate duration
-                    duration = (close_sell['created_at'] - open_buy['created_at']).total_seconds() / 3600
-                    
-                    trade = {
-                        'Entry DateTime': convert_to_india_time(open_buy['created_at'].isoformat()),
-                        'Exit DateTime': convert_to_india_time(close_sell['created_at'].isoformat()),
-                        'Entry Order ID': open_buy['id'],
-                        'Entry Side': open_buy['order_side'],
-                        'Entry Price': round(entry_price, 2),
-                        'Exit Order ID': close_sell['id'],
-                        'Exit Side': close_sell['order_side'],
-                        'Exit Price': round(exit_price, 2),
-                        'Qty Traded': round(trade_qty, 2),
-                        'Cashflow': round(net_cashflow, 2),
-                        'Trading Fees': round(total_fees, 2),
-                        'P&L': round(pnl, 2),
-                        'Duration (hours)': round(duration, 2),
-                        'Trade Status': 'Closed',
-                        'Entry Timestamp': open_buy['created_at'],  # For sorting
-                        'Exit Timestamp': close_sell['created_at']   # For sorting
-                    }
-                    
-                    trades.append(trade)
-                    
-                    # Mark both orders as processed
-                    processed_indices.add(open_buy.name)
-                    processed_indices.add(closest_idx)
-                    
-                    logger.debug(f"Paired Long trade: Entry {open_buy['id']} -> Exit {close_sell['id']}, P&L: ${pnl:.2f}")
+                    # Calculate trade metrics with validation
+                    try:
+                        entry_qty = float(open_buy['size'])
+                        exit_qty = float(close_sell['size'])
+                        trade_qty = min(entry_qty, exit_qty)
+                        
+                        if trade_qty <= 0:
+                            logger.warning(f"Skipping trade with invalid quantity: {trade_qty}")
+                            continue
+                        
+                        entry_price = float(open_buy['average_fill_price'])
+                        exit_price = float(close_sell['average_fill_price'])
+                        
+                        if entry_price <= 0 or exit_price <= 0:
+                            logger.warning(f"Skipping trade with invalid prices: entry={entry_price}, exit={exit_price}")
+                            continue
+                        
+                        # Calculate cashflow (notional value)
+                        entry_cashflow = entry_price * trade_qty
+                        exit_cashflow = exit_price * trade_qty
+                        net_cashflow = exit_cashflow - entry_cashflow
+                        
+                        # Calculate fees with validation
+                        entry_fees = float(open_buy.get('paid_commission', 0))
+                        exit_fees = float(close_sell.get('paid_commission', 0))
+                        total_fees = entry_fees + exit_fees
+                        
+                        # Calculate P&L
+                        pnl = net_cashflow - total_fees
+                        
+                        # Calculate duration
+                        duration = (close_sell['created_at'] - open_buy['created_at']).total_seconds() / 3600
+                        
+                        trade = {
+                            'Entry DateTime': convert_to_india_time(open_buy['created_at'].isoformat()),
+                            'Exit DateTime': convert_to_india_time(close_sell['created_at'].isoformat()),
+                            'Entry Order ID': open_buy['id'],
+                            'Entry Side': open_buy['order_side'],
+                            'Entry Price': round(entry_price, 2),
+                            'Exit Order ID': close_sell['id'],
+                            'Exit Side': close_sell['order_side'],
+                            'Exit Price': round(exit_price, 2),
+                            'Qty Traded': round(trade_qty, 2),
+                            'Cashflow': round(net_cashflow, 2),
+                            'Trading Fees': round(total_fees, 2),
+                            'P&L': round(pnl, 2),
+                            'Duration (hours)': round(duration, 2),
+                            'Trade Status': 'Closed',
+                            'Entry Timestamp': open_buy['created_at'],  # For sorting
+                            'Exit Timestamp': close_sell['created_at']   # For sorting
+                        }
+                        
+                        trades.append(trade)
+                        
+                        # Mark both orders as processed
+                        processed_indices.add(open_buy.name)
+                        processed_indices.add(closest_idx)
+                        
+                        logger.debug(f"Paired Long trade: Entry {open_buy['id']} -> Exit {close_sell['id']}, P&L: ${pnl:.2f}")
+                        
+                    except (ValueError, TypeError, KeyError) as e:
+                        logger.error(f"Error calculating trade metrics: {e}")
+                        continue
         
         # Pair Open Sell with Close Buy
         open_sells = df[df['order_side'] == 'Open Sell'].copy()
@@ -473,56 +514,69 @@ def pair_trades(orders):
                         logger.warning(f"Skipping invalid pair: Exit time {close_buy['created_at']} <= Entry time {open_sell_time}")
                         continue
                     
-                    # Calculate trade metrics
-                    entry_qty = float(open_sell['filled_size'])
-                    exit_qty = float(close_buy['filled_size'])
-                    trade_qty = min(entry_qty, exit_qty)
-                    
-                    entry_price = float(open_sell['average_fill_price'])
-                    exit_price = float(close_buy['average_fill_price'])
-                    
-                    # Calculate cashflow (notional value)
-                    entry_cashflow = entry_price * trade_qty
-                    exit_cashflow = exit_price * trade_qty
-                    net_cashflow = entry_cashflow - exit_cashflow  # For short trades
-                    
-                    # Calculate fees
-                    entry_fees = float(open_sell.get('fee', 0))
-                    exit_fees = float(close_buy.get('fee', 0))
-                    total_fees = entry_fees + exit_fees
-                    
-                    # Calculate P&L
-                    pnl = net_cashflow - total_fees
-                    
-                    # Calculate duration
-                    duration = (close_buy['created_at'] - open_sell['created_at']).total_seconds() / 3600
-                    
-                    trade = {
-                        'Entry DateTime': convert_to_india_time(open_sell['created_at'].isoformat()),
-                        'Exit DateTime': convert_to_india_time(close_buy['created_at'].isoformat()),
-                        'Entry Order ID': open_sell['id'],
-                        'Entry Side': open_sell['order_side'],
-                        'Entry Price': round(entry_price, 2),
-                        'Exit Order ID': close_buy['id'],
-                        'Exit Side': close_buy['order_side'],
-                        'Exit Price': round(exit_price, 2),
-                        'Qty Traded': round(trade_qty, 2),
-                        'Cashflow': round(net_cashflow, 2),
-                        'Trading Fees': round(total_fees, 2),
-                        'P&L': round(pnl, 2),
-                        'Duration (hours)': round(duration, 2),
-                        'Trade Status': 'Closed',
-                        'Entry Timestamp': open_sell['created_at'],  # For sorting
-                        'Exit Timestamp': close_buy['created_at']    # For sorting
-                    }
-                    
-                    trades.append(trade)
-                    
-                    # Mark both orders as processed
-                    processed_indices.add(open_sell.name)
-                    processed_indices.add(closest_idx)
-                    
-                    logger.debug(f"Paired Short trade: Entry {open_sell['id']} -> Exit {close_buy['id']}, P&L: ${pnl:.2f}")
+                    # Calculate trade metrics with validation
+                    try:
+                        entry_qty = float(open_sell['size'])
+                        exit_qty = float(close_buy['size'])
+                        trade_qty = min(entry_qty, exit_qty)
+                        
+                        if trade_qty <= 0:
+                            logger.warning(f"Skipping trade with invalid quantity: {trade_qty}")
+                            continue
+                        
+                        entry_price = float(open_sell['average_fill_price'])
+                        exit_price = float(close_buy['average_fill_price'])
+                        
+                        if entry_price <= 0 or exit_price <= 0:
+                            logger.warning(f"Skipping trade with invalid prices: entry={entry_price}, exit={exit_price}")
+                            continue
+                        
+                        # Calculate cashflow (notional value)
+                        entry_cashflow = entry_price * trade_qty
+                        exit_cashflow = exit_price * trade_qty
+                        net_cashflow = entry_cashflow - exit_cashflow  # For short trades
+                        
+                        # Calculate fees with validation
+                        entry_fees = float(open_sell.get('paid_commission', 0))
+                        exit_fees = float(close_buy.get('paid_commission', 0))
+                        total_fees = entry_fees + exit_fees
+                        
+                        # Calculate P&L
+                        pnl = net_cashflow - total_fees
+                        
+                        # Calculate duration
+                        duration = (close_buy['created_at'] - open_sell['created_at']).total_seconds() / 3600
+                        
+                        trade = {
+                            'Entry DateTime': convert_to_india_time(open_sell['created_at'].isoformat()),
+                            'Exit DateTime': convert_to_india_time(close_buy['created_at'].isoformat()),
+                            'Entry Order ID': open_sell['id'],
+                            'Entry Side': open_sell['order_side'],
+                            'Entry Price': round(entry_price, 2),
+                            'Exit Order ID': close_buy['id'],
+                            'Exit Side': close_buy['order_side'],
+                            'Exit Price': round(exit_price, 2),
+                            'Qty Traded': round(trade_qty, 2),
+                            'Cashflow': round(net_cashflow, 2),
+                            'Trading Fees': round(total_fees, 2),
+                            'P&L': round(pnl, 2),
+                            'Duration (hours)': round(duration, 2),
+                            'Trade Status': 'Closed',
+                            'Entry Timestamp': open_sell['created_at'],  # For sorting
+                            'Exit Timestamp': close_buy['created_at']    # For sorting
+                        }
+                        
+                        trades.append(trade)
+                        
+                        # Mark both orders as processed
+                        processed_indices.add(open_sell.name)
+                        processed_indices.add(closest_idx)
+                        
+                        logger.debug(f"Paired Short trade: Entry {open_sell['id']} -> Exit {close_buy['id']}, P&L: ${pnl:.2f}")
+                        
+                    except (ValueError, TypeError, KeyError) as e:
+                        logger.error(f"Error calculating trade metrics: {e}")
+                        continue
         
         # Handle unpaired entry orders (open positions)
         unpaired_entries = df[
@@ -533,30 +587,39 @@ def pair_trades(orders):
         logger.info(f"Found {len(unpaired_entries)} unpaired entry orders (open positions)")
         
         for _, entry_order in unpaired_entries.iterrows():
-            entry_price = float(entry_order['average_fill_price'])
-            entry_qty = float(entry_order['filled_size'])
-            
-            trade = {
-                'Entry DateTime': convert_to_india_time(entry_order['created_at'].isoformat()),
-                'Exit DateTime': '',  # Blank for open positions
-                'Entry Order ID': entry_order['id'],
-                'Entry Side': entry_order['order_side'],
-                'Entry Price': round(entry_price, 2),
-                'Exit Order ID': '',  # Blank for open positions
-                'Exit Side': '',  # Blank for open positions
-                'Exit Price': '',  # Blank for open positions
-                'Qty Traded': round(entry_qty, 2),
-                'Cashflow': '',  # Blank for open positions
-                'Trading Fees': round(float(entry_order.get('fee', 0)), 2),
-                'P&L': '',  # Blank for open positions
-                'Duration (hours)': '',  # Blank for open positions
-                'Trade Status': 'Open',
-                'Entry Timestamp': entry_order['created_at'],  # For sorting
-                'Exit Timestamp': entry_order['created_at']    # For open positions, use entry time
-            }
-            
-            trades.append(trade)
-            logger.debug(f"Open position: Entry {entry_order['id']} ({entry_order['order_side']})")
+            try:
+                entry_price = float(entry_order['average_fill_price'])
+                entry_qty = float(entry_order['size'])
+                
+                if entry_price <= 0 or entry_qty <= 0:
+                    logger.warning(f"Skipping open position with invalid data: price={entry_price}, qty={entry_qty}")
+                    continue
+                
+                trade = {
+                    'Entry DateTime': convert_to_india_time(entry_order['created_at'].isoformat()),
+                    'Exit DateTime': '',  # Blank for open positions
+                    'Entry Order ID': entry_order['id'],
+                    'Entry Side': entry_order['order_side'],
+                    'Entry Price': round(entry_price, 2),
+                    'Exit Order ID': '',  # Blank for open positions
+                    'Exit Side': '',  # Blank for open positions
+                    'Exit Price': '',  # Blank for open positions
+                    'Qty Traded': round(entry_qty, 2),
+                    'Cashflow': '',  # Blank for open positions
+                    'Trading Fees': round(float(entry_order.get('paid_commission', 0)), 2),
+                    'P&L': '',  # Blank for open positions
+                    'Duration (hours)': '',  # Blank for open positions
+                    'Trade Status': 'Open',
+                    'Entry Timestamp': entry_order['created_at'],  # For sorting
+                    'Exit Timestamp': entry_order['created_at']    # For open positions, use entry time
+                }
+                
+                trades.append(trade)
+                logger.debug(f"Open position: Entry {entry_order['id']} ({entry_order['order_side']})")
+                
+            except (ValueError, TypeError, KeyError) as e:
+                logger.error(f"Error processing open position: {e}")
+                continue
         
         if not trades:
             logger.warning("No trades found")
@@ -564,6 +627,11 @@ def pair_trades(orders):
         
         # Create DataFrame and sort by entry timestamp to ensure chronological order
         trades_df = pd.DataFrame(trades)
+        
+        if trades_df.empty:
+            logger.warning("No trades to process")
+            return trades_df
+        
         trades_df = trades_df.sort_values('Entry Timestamp').reset_index(drop=True)
         
         # ENSURE: Entry datetime of each trade > Exit datetime of previous trade (except first trade)
@@ -571,30 +639,39 @@ def pair_trades(orders):
         last_exit_time = None
         
         for idx, trade in trades_df.iterrows():
-            entry_time = trade['Entry Timestamp']
-            
-            # For the first trade, no previous exit time to compare
-            if idx == 0:
+            try:
+                entry_time = trade['Entry Timestamp']
+                
+                # For the first trade, no previous exit time to compare
+                if idx == 0:
+                    valid_trades.append(trade)
+                    if trade['Trade Status'] == 'Closed':
+                        last_exit_time = trade['Exit Timestamp']
+                    else:
+                        last_exit_time = entry_time  # For open positions
+                    continue
+                
+                # For subsequent trades, ensure entry time > last exit time
+                if last_exit_time is not None and entry_time <= last_exit_time:
+                    logger.warning(f"Skipping trade {idx}: Entry time {entry_time} <= Previous exit time {last_exit_time}")
+                    continue
+                
                 valid_trades.append(trade)
                 if trade['Trade Status'] == 'Closed':
                     last_exit_time = trade['Exit Timestamp']
                 else:
                     last_exit_time = entry_time  # For open positions
+                    
+            except Exception as e:
+                logger.error(f"Error processing trade {idx}: {e}")
                 continue
-            
-            # For subsequent trades, ensure entry time > last exit time
-            if last_exit_time is not None and entry_time <= last_exit_time:
-                logger.warning(f"Skipping trade {idx}: Entry time {entry_time} <= Previous exit time {last_exit_time}")
-                continue
-            
-            valid_trades.append(trade)
-            if trade['Trade Status'] == 'Closed':
-                last_exit_time = trade['Exit Timestamp']
-            else:
-                last_exit_time = entry_time  # For open positions
         
         # Create final DataFrame with valid trades
         final_trades_df = pd.DataFrame(valid_trades)
+        
+        if final_trades_df.empty:
+            logger.warning("No valid trades after chronological filtering")
+            return final_trades_df
         
         # Remove temporary timestamp columns used for sorting
         if 'Entry Timestamp' in final_trades_df.columns:
@@ -625,6 +702,72 @@ def pair_trades(orders):
         logger.error(f"Error pairing trades: {e}")
         return pd.DataFrame()
 
+def save_processed_orders_to_csv(df, filename="processed_orders_data.csv"):
+    """
+    Save processed orders DataFrame to CSV after classification
+    
+    Args:
+        df (pd.DataFrame): Processed orders DataFrame
+        filename (str): Output filename
+    """
+    try:
+        if df is None or df.empty:
+            logger.warning("No processed orders to save")
+            return
+        
+        # Save to CSV
+        df.to_csv(filename, index=False)
+        logger.info(f"Processed orders data saved to: {filename}")
+        logger.info(f"Processed data shape: {df.shape}")
+        
+        # Log classification summary
+        if 'order_side' in df.columns:
+            logger.info("Order classification summary:")
+            classification_counts = df['order_side'].value_counts()
+            for side, count in classification_counts.items():
+                logger.info(f"  {side}: {count}")
+        
+    except Exception as e:
+        logger.error(f"Error saving processed orders to CSV: {e}")
+
+def save_raw_orders_to_csv(orders, filename="raw_orders_data.csv"):
+    """
+    Save raw orders data to CSV for analysis and debugging
+    
+    Args:
+        orders (list): List of order dictionaries
+        filename (str): Output filename
+    """
+    try:
+        if not orders:
+            logger.warning("No orders to save")
+            return
+        
+        df = pd.DataFrame(orders)
+        
+        # Save to CSV
+        df.to_csv(filename, index=False)
+        logger.info(f"Raw orders data saved to: {filename}")
+        logger.info(f"Raw data shape: {df.shape}")
+        logger.info(f"Raw data columns: {list(df.columns)}")
+        
+        # Log sample data
+        if not df.empty:
+            logger.info("Sample raw order data:")
+            sample_row = df.iloc[0]
+            for col in df.columns:
+                try:
+                    value = sample_row[col]
+                    # Truncate long values for logging
+                    if isinstance(value, str) and len(value) > 100:
+                        value = value[:100] + "..."
+                    logger.info(f"  {col}: {value}")
+                except Exception as e:
+                    logger.warning(f"Error logging column {col}: {e}")
+        
+    except Exception as e:
+        logger.error(f"Error saving raw orders to CSV: {e}")
+
 def save_trades_to_csv(trades_df, filename="delta_trades_report.csv"):
     """
     Save trades DataFrame to CSV with proper formatting
@@ -634,7 +777,7 @@ def save_trades_to_csv(trades_df, filename="delta_trades_report.csv"):
         filename (str): Output filename
     """
     try:
-        if trades_df.empty:
+        if trades_df is None or trades_df.empty:
             logger.warning("No trades to save")
             return
         
@@ -642,10 +785,13 @@ def save_trades_to_csv(trades_df, filename="delta_trades_report.csv"):
         numeric_columns = ['Entry Price', 'Exit Price', 'Qty Traded', 'Cashflow', 'Trading Fees', 'P&L', 'Duration (hours)']
         for col in numeric_columns:
             if col in trades_df.columns:
-                # Convert to numeric, handling empty strings
-                trades_df[col] = pd.to_numeric(trades_df[col], errors='coerce')
-                # Round to 2 decimal places
-                trades_df[col] = trades_df[col].round(2)
+                try:
+                    # Convert to numeric, handling empty strings
+                    trades_df[col] = pd.to_numeric(trades_df[col], errors='coerce')
+                    # Round to 2 decimal places
+                    trades_df[col] = trades_df[col].round(2)
+                except Exception as e:
+                    logger.warning(f"Error formatting column {col}: {e}")
         
         # Save to CSV
         trades_df.to_csv(filename, index=False, float_format='%.2f')
@@ -656,10 +802,19 @@ def save_trades_to_csv(trades_df, filename="delta_trades_report.csv"):
             logger.info("Sample trade data:")
             sample_row = trades_df.iloc[0]
             for col in trades_df.columns:
-                logger.info(f"  {col}: {sample_row[col]}")
+                try:
+                    logger.info(f"  {col}: {sample_row[col]}")
+                except Exception as e:
+                    logger.warning(f"Error logging column {col}: {e}")
         
     except Exception as e:
         logger.error(f"Error saving trades to CSV: {e}")
+        # Try to save without formatting
+        try:
+            trades_df.to_csv(filename, index=False)
+            logger.info(f"Trades report saved to: {filename} (without formatting)")
+        except Exception as e2:
+            logger.error(f"Failed to save trades even without formatting: {e2}")
 
 def main():
     """Main function to generate Delta Exchange trading report"""
@@ -675,11 +830,19 @@ def main():
         
         logger.info(f"Processing {len(orders)} orders...")
         
+        # Save raw orders to CSV
+        save_raw_orders_to_csv(orders, "raw_orders_data.csv")
+
         # Pair trades
         trades_df = pair_trades(orders)
         
         if not trades_df.empty:
-            # Save to CSV
+            # Save to CSV with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            trades_filename = f"delta_trades_report_{timestamp}.csv"
+            save_trades_to_csv(trades_df, trades_filename)
+            
+            # Also save without timestamp for easy access
             save_trades_to_csv(trades_df, "delta_trades_report.csv")
             
             # Print summary
@@ -702,7 +865,11 @@ def main():
                 print(f"Total fees: ${total_fees:.2f}")
                 print(f"Win rate: {win_rate:.1f}%")
             
-            print(f"\nReport saved to: delta_trades_report.csv")
+            print(f"\nReports saved to:")
+            print(f"  - {trades_filename} (timestamped)")
+            print(f"  - delta_trades_report.csv (latest)")
+            print(f"  - raw_orders_data.csv (raw API data)")
+            print(f"  - processed_orders_data.csv (classified orders)")
         else:
             print("No trades found")
         
