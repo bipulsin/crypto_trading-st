@@ -63,7 +63,7 @@ def get_all_closed_orders(product_id=None, max_orders=10000):
             if product_id:
                 path += f"&product_id={product_id}"
             
-            logger.info(f"Fetching orders with offset: {offset}")
+            # logger.info(f"Fetching orders with offset: {offset}")
             
             headers, timestamp, message, signature = sign_request("GET", path)
             
@@ -117,25 +117,53 @@ def determine_order_type(order):
         str: 'entry' or 'exit'
     """
     try:
+        # Add debugging for first few orders
+        if 'debug_order_count' not in globals():
+            globals()['debug_order_count'] = 0
+        
+        if globals()['debug_order_count'] < 3:
+            logger.info(f"Debug Order {globals()['debug_order_count']}: {order}")
+            globals()['debug_order_count'] += 1
+        
         # Check if it's a reduce-only order (exit)
         if order.get('reduce_only', False):
+            logger.debug(f"Order {order.get('id', 'unknown')} classified as exit (reduce_only)")
             return 'exit'
         
         # Check if it's a bracket order (exit)
         if order.get('bracket_order', False):
+            logger.debug(f"Order {order.get('id', 'unknown')} classified as exit (bracket_order)")
             return 'exit'
         
         # Check meta_data for P&L info (exit orders often have P&L)
         meta_data = order.get('meta_data', {})
-        if meta_data and 'pnl' in meta_data:
+        if meta_data and isinstance(meta_data, dict) and 'pnl' in meta_data:
+            logger.debug(f"Order {order.get('id', 'unknown')} classified as exit (has P&L in meta_data)")
             return 'exit'
         
-        # Check order type
+        # Check order type - be more specific about exit order types
         order_type = order.get('order_type', '').lower()
         if order_type in ['stop', 'stop_market', 'take_profit', 'take_profit_market']:
+            logger.debug(f"Order {order.get('id', 'unknown')} classified as exit (order_type: {order_type})")
             return 'exit'
         
-        # Default to entry for market and limit orders
+        # Check if order has a specific exit indicator
+        if order.get('is_close', False):
+            logger.debug(f"Order {order.get('id', 'unknown')} classified as exit (is_close)")
+            return 'exit'
+        
+        # Check side and context - if it's a sell order and we have a long position, it's likely an exit
+        # This is a more nuanced approach
+        side = order.get('side', '').lower()
+        
+        # For now, let's be conservative and classify based on order type
+        # Market and limit orders are typically entries unless they have specific exit indicators
+        if order_type in ['market', 'limit']:
+            logger.debug(f"Order {order.get('id', 'unknown')} classified as entry (order_type: {order_type})")
+            return 'entry'
+        
+        # Default to entry for unknown order types
+        logger.debug(f"Order {order.get('id', 'unknown')} classified as entry (default)")
         return 'entry'
         
     except Exception as e:
@@ -167,7 +195,7 @@ def determine_order_side(order):
             elif side == 'buy':
                 return 'Close Buy'
         
-        # Fallback
+        # Fallback - if we can't determine order type, use side as fallback
         if side == 'buy':
             return 'Open Buy'
         else:
@@ -225,6 +253,14 @@ def pair_trades(orders):
         df['order_type'] = df.apply(determine_order_type, axis=1)
         df['order_side'] = df.apply(determine_order_side, axis=1)
         
+        # Add debugging to understand order classification
+        logger.info("Sample order classification:")
+        sample_orders = df.head(5)
+        for idx, order in sample_orders.iterrows():
+            logger.info(f"  Order {order.get('id', 'unknown')}: side={order.get('side', 'unknown')}, "
+                       f"order_type={order.get('order_type', 'unknown')}, "
+                       f"classified_as={order['order_side']}")
+        
         # Parse datetime
         df['created_at'] = pd.to_datetime(df['created_at'], errors='coerce')
         df = df.dropna(subset=['created_at'])
@@ -237,6 +273,85 @@ def pair_trades(orders):
         logger.info(f"  Close Sell: {len(df[df['order_side'] == 'Close Sell'])}")
         logger.info(f"  Open Sell: {len(df[df['order_side'] == 'Open Sell'])}")
         logger.info(f"  Close Buy: {len(df[df['order_side'] == 'Close Buy'])}")
+        
+        # If we have no entry orders, let's try a different approach
+        if len(df[df['order_side'].isin(['Open Buy', 'Open Sell'])]) == 0:
+            logger.warning("No entry orders found! Trying alternative classification...")
+            
+            # Alternative approach: classify based on chronological order and side
+            # Assume we have alternating buy/sell orders
+            df_sorted = df.sort_values('created_at').reset_index(drop=True)
+            
+            # Simple heuristic: if we have more sell orders than buy orders, 
+            # the first orders are likely entries
+            buy_orders = df_sorted[df_sorted['side'].str.lower() == 'buy']
+            sell_orders = df_sorted[df_sorted['side'].str.lower() == 'sell']
+            
+            logger.info(f"Alternative analysis: {len(buy_orders)} buy orders, {len(sell_orders)} sell orders")
+            
+            # If we have roughly equal numbers, assume first half are entries
+            if abs(len(buy_orders) - len(sell_orders)) <= 100:  # Allow some tolerance
+                logger.info("Roughly equal buy/sell orders - using chronological classification")
+                
+                # Classify first half as entries, second half as exits
+                mid_point = len(df_sorted) // 2
+                
+                for idx, order in df_sorted.iterrows():
+                    side = order.get('side', '').lower()
+                    if idx < mid_point:
+                        # First half - entries
+                        if side == 'buy':
+                            df_sorted.loc[idx, 'order_side'] = 'Open Buy'
+                        else:
+                            df_sorted.loc[idx, 'order_side'] = 'Open Sell'
+                    else:
+                        # Second half - exits
+                        if side == 'sell':
+                            df_sorted.loc[idx, 'order_side'] = 'Close Sell'
+                        else:
+                            df_sorted.loc[idx, 'order_side'] = 'Close Buy'
+                
+                df = df_sorted
+                logger.info("Alternative classification applied")
+                logger.info("Updated order classification breakdown:")
+                logger.info(f"  Open Buy: {len(df[df['order_side'] == 'Open Buy'])}")
+                logger.info(f"  Close Sell: {len(df[df['order_side'] == 'Close Sell'])}")
+                logger.info(f"  Open Sell: {len(df[df['order_side'] == 'Open Sell'])}")
+                logger.info(f"  Close Buy: {len(df[df['order_side'] == 'Close Buy'])}")
+            else:
+                # If we have significantly different numbers, use a different approach
+                logger.info("Unequal buy/sell orders - using pattern-based classification")
+                
+                # Look for patterns in the data
+                # If we have more sell orders, assume we're closing long positions
+                # If we have more buy orders, assume we're closing short positions
+                
+                if len(sell_orders) > len(buy_orders):
+                    logger.info("More sell orders - assuming closing long positions")
+                    # Classify buy orders as entries, sell orders as exits
+                    for idx, order in df_sorted.iterrows():
+                        side = order.get('side', '').lower()
+                        if side == 'buy':
+                            df_sorted.loc[idx, 'order_side'] = 'Open Buy'
+                        else:
+                            df_sorted.loc[idx, 'order_side'] = 'Close Sell'
+                else:
+                    logger.info("More buy orders - assuming closing short positions")
+                    # Classify sell orders as entries, buy orders as exits
+                    for idx, order in df_sorted.iterrows():
+                        side = order.get('side', '').lower()
+                        if side == 'sell':
+                            df_sorted.loc[idx, 'order_side'] = 'Open Sell'
+                        else:
+                            df_sorted.loc[idx, 'order_side'] = 'Close Buy'
+                
+                df = df_sorted
+                logger.info("Pattern-based classification applied")
+                logger.info("Updated order classification breakdown:")
+                logger.info(f"  Open Buy: {len(df[df['order_side'] == 'Open Buy'])}")
+                logger.info(f"  Close Sell: {len(df[df['order_side'] == 'Close Sell'])}")
+                logger.info(f"  Open Sell: {len(df[df['order_side'] == 'Open Sell'])}")
+                logger.info(f"  Close Buy: {len(df[df['order_side'] == 'Close Buy'])}")
         
         trades = []
         processed_indices = set()
