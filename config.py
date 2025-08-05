@@ -28,7 +28,7 @@ SYMBOL = 'BTCUSD'
 
 
 CAPITAL_MODE = '100%'
-CANDLE_INTERVAL = 5
+CANDLE_INTERVAL = 15
 SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3
 ASSET_ID = 3
@@ -46,7 +46,7 @@ AUTO_CLOSE_INVALID_ORDERS = True  # Automatically close orders that violate trad
 
 # Trading configuration
 DEFAULT_CAPITAL = 200  # Default capital if balance cannot be retrieved
-LEVERAGE = 50  # Leverage used for position sizing
+LEVERAGE = 25  # Leverage used for position sizing
 POSITION_SIZE_PERCENT = 0.5  # Percentage of balance to use for each trade
 TAKE_PROFIT_MULTIPLIER = 1.25  # Multiplier for take profit calculation
 ORDER_PRICE_OFFSET = 10  # Price offset for limit orders ($100 above/below market)
@@ -89,4 +89,4 @@ ENABLE_FLEXIBLE_ENTRY = False  # Allow new orders anytime (not just at candle cl
 ENABLE_CANDLE_CLOSE_AFTER_POSITION_CLOSURE = True  # Only allow new positions at candle close after position closure
 
 # SuperTrend trailing stop configuration
-ST_WITH_TRAILING = True  # Enable trailing stop loss for SuperTrend strategy
+ST_WITH_TRAILING = False  # Enable trailing stop loss for SuperTrend strategy

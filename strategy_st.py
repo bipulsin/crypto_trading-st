@@ -88,19 +88,25 @@ class DeltaExchangeBot:
         """Get open orders using delta_api"""
         return self.api.get_open_orders(self.product_id)
 
-    def calculate_position_size(self, price: float, balance: float) -> int:
+    def calculate_position_size(self, price: float, balance: float) -> float:
         """Calculate position size based on balance and risk management"""
         risk_amount = balance * self.position_size_pct
-        position_size = int((risk_amount * self.leverage) / price)
+        position_size = (risk_amount * self.leverage) / price
         
-        # Ensure minimum position size
-        if position_size < 1:
-            position_size = 1
+        # Ensure minimum position size (0.001 BTC minimum = 1 lot)
+        if position_size < 0.001:
+            position_size = 0.001
             
-        self.logger.info(f"Calculated position size: {position_size} (balance: {balance}, price: {price})")
-        return position_size
+        # Round to 3 decimal places for BTC precision
+        position_size = round(position_size, 3)
+        
+        # Multiply by 1000 for order placement (convert BTC to lot units)
+        order_size = position_size * 1000
+            
+        self.logger.info(f"Calculated position size: {position_size} BTC = {order_size} lots (balance: {balance}, price: {price})")
+        return order_size
 
-    def place_market_order(self, side: str, size: int, stop_loss: float = None, take_profit: float = None, current_price: float = None) -> Optional[Dict]:
+    def place_market_order(self, side: str, size: float, stop_loss: float = None, take_profit: float = None, current_price: float = None) -> Optional[Dict]:
         """Place market order using delta_api"""
         return self.api.place_market_order_with_trailing(
             side=side,
@@ -349,7 +355,7 @@ class DeltaExchangeBot:
         """Check if the server is responding properly"""
         try:
             # Try a simple market data request first (no auth required)
-            url = f"{self.api.live_base_url}/v2/history/candles"
+            url = f"{LIVE_BASE_URL}/v2/history/candles"
             params = {
                 'symbol': 'BTCUSD',
                 'resolution': '5m',
@@ -371,8 +377,8 @@ class DeltaExchangeBot:
     def log_server_status(self):
         """Log current server configuration and status"""
         self.logger.info(f"🔧 Server Configuration:")
-        self.logger.info(f"   Base URL: {self.api.base_url}")
-        self.logger.info(f"   Live Base URL: {self.api.live_base_url}")
+        self.logger.info(f"   Base URL: {BASE_URL}")
+        self.logger.info(f"   Live Base URL: {LIVE_BASE_URL}")
         self.logger.info(f"   Product ID: {self.product_id}")
         self.logger.info(f"   Symbol: {self.symbol}")
         

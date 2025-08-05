@@ -523,7 +523,7 @@ class DeltaAPI:
             if not body:
                 return True  # Nothing to update
                 
-            headers = self.sign_request('PUT', f'/v2/orders/{order_id}', body)
+            headers, _, _, _ = self.sign_request('PUT', f'/v2/orders/{order_id}', body)
             r = self.session.put(url, headers=headers, json=body, timeout=10)
             r.raise_for_status()
             data = r.json()
@@ -535,7 +535,7 @@ class DeltaAPI:
         """Get detailed status of a specific order"""
         try:
             url = f"{BASE_URL}/v2/orders/{order_id}"
-            headers = self.sign_request('GET', f'/v2/orders/{order_id}')
+            headers, _, _, _ = self.sign_request('GET', f'/v2/orders/{order_id}')
             r = self.session.get(url, headers=headers, timeout=10)
             r.raise_for_status()
             data = r.json()
@@ -679,7 +679,7 @@ class DeltaAPI:
         time.sleep(0.1)
         
         path = f"/v2/positions?product_id={product_id}"
-        headers = self.sign_request("GET", path)
+        headers, _, _, _ = self.sign_request("GET", path)
         
         try:
             url = f"{BASE_URL}{path}"
@@ -722,7 +722,7 @@ class DeltaAPI:
             product_id = SYMBOL_ID
             
         path = f"/v2/orders?product_id={product_id}"
-        headers = self.sign_request("GET", path)
+        headers, _, _, _ = self.sign_request("GET", path)
         
         try:
             url = f"{BASE_URL}{path}"
@@ -751,7 +751,7 @@ class DeltaAPI:
             
         order_data = {
             'product_id': product_id,
-            'size': size,
+            'size': int(size),  # Convert to integer as API expects
             'side': side,
             'order_type': 'market_order'
         }
@@ -771,23 +771,23 @@ class DeltaAPI:
             if st_with_trailing:
                 order_data.update({
                     # Bracket trailing stop loss parameters
-                    "bracket_trail_amount": str(bracket_trail_amount),
+                    "bracket_trail_amount": str(round(bracket_trail_amount, 2)),
                     "bracket_stop_trigger_method": "mark_price",
                     # Bracket take profit parameters  
-                    "bracket_take_profit_price": str(take_profit),
-                    "bracket_take_profit_limit_price": str(take_profit)  # Market order for TP
+                    "bracket_take_profit_price": str(round(take_profit, 2)),
+                    "bracket_take_profit_limit_price": str(round(take_profit, 2))  # Market order for TP
                 })
-                logger.info(f"Placing bracket order with trailing stop loss distance: {trailing_distance} (trail amount: {bracket_trail_amount})")
+                logger.info(f"Placing bracket order with trailing stop loss distance: {round(trailing_distance, 2)} (trail amount: {round(bracket_trail_amount, 2)})")
             else:
                 # Use fixed stop loss without trailing
                 order_data.update({
-                    "bracket_stop_loss_price": str(stop_loss),
-                    "bracket_stop_loss_limit_price": str(stop_loss),
-                    "bracket_take_profit_price": str(take_profit),
-                    "bracket_take_profit_limit_price": str(take_profit),
+                    "bracket_stop_loss_price": str(round(stop_loss, 2)),
+                    "bracket_stop_loss_limit_price": str(round(stop_loss, 2)),
+                    "bracket_take_profit_price": str(round(take_profit, 2)),
+                    "bracket_take_profit_limit_price": str(round(take_profit, 2)),
                     "bracket_stop_trigger_method": "mark_price"
                 })
-                logger.info(f"Placing bracket order with fixed stop loss: {stop_loss} (trailing disabled)")
+                logger.info(f"Placing bracket order with fixed stop loss: {round(stop_loss, 2)} (trailing disabled)")
         
         # Validate order data before sending
         if not self.validate_order_data(order_data):
@@ -798,23 +798,28 @@ class DeltaAPI:
         
         if response.get('success', False):
             order = response.get('result')
-            logger.info(f"Order placed successfully: {side} {size} contracts at market price")
+            logger.info(f"Order placed successfully: {side} {int(size)} contracts at market price")
             if stop_loss:
-                logger.info(f"Stop Loss: {stop_loss} (with trailing distance: {trailing_distance})")
+                logger.info(f"Stop Loss: {round(stop_loss, 2)} (with trailing distance: {round(trailing_distance, 2) if 'trailing_distance' in locals() else 'N/A'})")
             if take_profit:
-                logger.info(f"Take Profit: {take_profit}")
+                logger.info(f"Take Profit: {round(take_profit, 2)}")
             
             return order
         else:
-            # Check for bracket order position exists error
+            # Log detailed error information
             error_msg = str(response)
+            logger.error(f"Order placement failed with response: {response}")
+            if 'error' in response:
+                logger.error(f"API Error details: {response['error']}")
+            
+            # Check for bracket order position exists error
             if 'bracket_order_position_exists' in error_msg:
                 logger.warning("Bracket order failed - position may exist. Trying simple market order...")
                 
                 # Try placing simple market order without bracket orders
                 simple_order_data = {
                     'product_id': product_id,
-                    'size': size,
+                    'size': int(size),  # Convert to integer as API expects
                     'side': side,
                     'order_type': 'market_order'
                 }
@@ -823,7 +828,7 @@ class DeltaAPI:
                 
                 if simple_response.get('success', False):
                     order = simple_response.get('result')
-                    logger.info(f"Simple market order placed successfully: {side} {size} contracts")
+                    logger.info(f"Simple market order placed successfully: {side} {int(size)} contracts")
                     logger.warning("Bracket orders not available - position may already exist")
                     return order
                 else:
