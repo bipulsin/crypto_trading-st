@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 # Configuration
 EC2_IP="43.206.219.70"
 EC2_USER="ubuntu"
-KEY_FILE="your-key.pem"  # Change this to your key file
+KEY_FILE="trademanthan.pem"  # Change this to your key file
 REPO_URL="https://github.com/bipulsin/crypto_trading-st.git"
 
 # Function to print colored output
@@ -49,25 +49,71 @@ echo "🔧 Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
 echo "📦 Installing required packages..."
-sudo apt install -y python3 python3-pip python3-venv git nginx
+sudo apt install -y git nginx
+echo "✅ Python 3.10.2 already installed - skipping Python installation"
 
-echo "📁 Creating project directory..."
-mkdir -p ~/trading-bot
-cd ~/trading-bot
+echo "📁 Setting up project directory..."
+echo "Current location: $(pwd)"
 
-echo "📥 Cloning repository..."
+# Ask user preference for directory structure
+echo ""
+echo "🔧 Directory Structure Options:"
+echo "1. Use current root directory (current setup)"
+echo "2. Move to ~/trading-bot directory (recommended)"
+echo "3. Create new ~/trading-bot directory and copy files"
+
+read -p "Choose option (1/2/3): " dir_choice
+
+case $dir_choice in
+    1)
+        echo "📁 Using current root directory..."
+        PROJECT_DIR="$(pwd)"
+        ;;
+    2)
+        echo "📁 Moving to ~/trading-bot directory..."
+        mkdir -p ~/trading-bot
+        if [ -d "crypto_trading-st" ]; then
+            echo "Moving existing crypto_trading-st to ~/trading-bot/"
+            mv crypto_trading-st ~/trading-bot/
+        fi
+        PROJECT_DIR="$HOME/trading-bot"
+        ;;
+    3)
+        echo "📁 Creating new ~/trading-bot directory..."
+        mkdir -p ~/trading-bot
+        PROJECT_DIR="$HOME/trading-bot"
+        ;;
+    *)
+        echo "Invalid choice. Using current directory..."
+        PROJECT_DIR="$(pwd)"
+        ;;
+esac
+
+cd "$PROJECT_DIR"
+
+echo "📥 Setting up repository..."
 if [ -d "crypto_trading-st" ]; then
-    echo "Repository already exists, pulling latest changes..."
+    echo "Repository exists, pulling latest changes..."
     cd crypto_trading-st
     git pull origin main
 else
+    echo "Cloning repository..."
     git clone https://github.com/bipulsin/crypto_trading-st.git
     cd crypto_trading-st
 fi
 
 echo "🐍 Setting up Python virtual environment..."
-python3 -m venv venv
-source venv/bin/activate
+if [ -d "venv" ]; then
+    echo "Virtual environment exists, activating..."
+    source venv/bin/activate
+else
+    echo "Creating new virtual environment..."
+    python3 -m venv venv
+    source venv/bin/activate
+fi
+
+echo "✅ Python version: $(python3 --version)"
+echo "✅ Virtual environment: $VIRTUAL_ENV"
 
 echo "📦 Installing Python dependencies..."
 pip install --upgrade pip
@@ -82,21 +128,25 @@ WEB_CONFIG_PORT=5000
 ENVEOF
 
 echo "📄 Creating systemd service file..."
-sudo tee /etc/systemd/system/trading-bot-web-config.service > /dev/null << 'SERVICEEOF'
+# Get the actual project directory for the service file
+ACTUAL_PROJECT_DIR="$(pwd)"
+ACTUAL_VENV_PATH="$ACTUAL_PROJECT_DIR/venv"
+
+sudo tee /etc/systemd/system/trading-bot-web-config.service > /dev/null << SERVICEEOF
 [Unit]
 Description=Trading Bot Web Configuration Server
 After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/trading-bot/crypto_trading-st
-Environment=PATH=/home/ubuntu/trading-bot/crypto_trading-st/venv/bin
+User=$USER
+WorkingDirectory=$ACTUAL_PROJECT_DIR
+Environment=PATH=$ACTUAL_VENV_PATH/bin
 Environment=WEB_CONFIG_USERNAME=admin
 Environment=WEB_CONFIG_PASSWORD=tradingbot2024
 Environment=FLASK_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 Environment=WEB_CONFIG_PORT=5000
-ExecStart=/home/ubuntu/trading-bot/crypto_trading-st/venv/bin/gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 web_config:app
+ExecStart=$ACTUAL_VENV_PATH/bin/gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 web_config:app
 Restart=always
 RestartSec=10
 
@@ -139,6 +189,10 @@ sudo systemctl start trading-bot-web-config
 
 echo "✅ Deployment completed!"
 echo "================================================================"
+echo "📁 Project Location: $ACTUAL_PROJECT_DIR"
+echo "🐍 Python Version: $(python3 --version)"
+echo "🔧 Virtual Environment: $ACTUAL_VENV_PATH"
+echo ""
 echo "🌐 Access URLs:"
 echo "   Dashboard: http://43.206.219.70"
 echo "   API: http://43.206.219.70/api/"
@@ -151,6 +205,12 @@ echo "🔧 Service Management:"
 echo "   Status: sudo systemctl status trading-bot-web-config"
 echo "   Logs: sudo journalctl -u trading-bot-web-config -f"
 echo "   Restart: sudo systemctl restart trading-bot-web-config"
+echo "   Stop: sudo systemctl stop trading-bot-web-config"
+echo ""
+echo "📁 File Locations:"
+echo "   Config: $ACTUAL_PROJECT_DIR/config.py"
+echo "   Logs: sudo journalctl -u trading-bot-web-config"
+echo "   Service: /etc/systemd/system/trading-bot-web-config.service"
 echo "================================================================"
 
 EOF

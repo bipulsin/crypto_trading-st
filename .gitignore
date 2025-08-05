@@ -94,6 +94,19 @@ tradereport.csv
 delta_fills_history.csv
 *.csv
 
+# Data files
+data/
+logs/
+
+# Backup files
+config_backups/
+*.backup
+*.bak
+
+# Test files
+test_*.py
+*_test.py
+
 # IDE
 .vscode/
 .idea/

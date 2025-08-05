@@ -31,7 +31,7 @@ def setup_environment():
         os.environ['WEB_CONFIG_USERNAME'] = 'admin'
     
     if not os.environ.get('WEB_CONFIG_PASSWORD'):
-        os.environ['WEB_CONFIG_PASSWORD'] = 'admin123'
+        os.environ['WEB_CONFIG_PASSWORD'] = 'tradingbot2024'
     
     if not os.environ.get('FLASK_SECRET_KEY'):
         # Generate a random secret key
@@ -40,6 +40,12 @@ def setup_environment():
     
     if not os.environ.get('WEB_CONFIG_PORT'):
         os.environ['WEB_CONFIG_PORT'] = '5000'
+    
+    # Check if we're in a virtual environment
+    if not os.environ.get('VIRTUAL_ENV'):
+        print("⚠️  Warning: Not running in a virtual environment")
+        print("💡 Consider activating your virtual environment first:")
+        print("   source venv/bin/activate")
 
 def check_dependencies():
     """Check and install required dependencies"""
@@ -65,6 +71,15 @@ def check_dependencies():
 
 def create_systemd_service():
     """Create systemd service file for auto-start"""
+    # Get virtual environment path
+    venv_path = os.environ.get('VIRTUAL_ENV', '')
+    if venv_path:
+        python_executable = os.path.join(venv_path, 'bin', 'python3')
+        gunicorn_executable = os.path.join(venv_path, 'bin', 'gunicorn')
+    else:
+        python_executable = sys.executable
+        gunicorn_executable = 'gunicorn'
+    
     service_content = f"""[Unit]
 Description=Trading Bot Web Configuration Server
 After=network.target
@@ -73,12 +88,12 @@ After=network.target
 Type=simple
 User={os.getenv('USER', 'ubuntu')}
 WorkingDirectory={os.getcwd()}
-Environment=PATH={os.getenv('PATH')}
+Environment=PATH={os.environ.get('VIRTUAL_ENV', '')}/bin:{os.getenv('PATH')}
 Environment=WEB_CONFIG_USERNAME={os.environ.get('WEB_CONFIG_USERNAME', 'admin')}
-Environment=WEB_CONFIG_PASSWORD={os.environ.get('WEB_CONFIG_PASSWORD', 'admin123')}
+Environment=WEB_CONFIG_PASSWORD={os.environ.get('WEB_CONFIG_PASSWORD', 'tradingbot2024')}
 Environment=FLASK_SECRET_KEY={os.environ.get('FLASK_SECRET_KEY')}
 Environment=WEB_CONFIG_PORT={os.environ.get('WEB_CONFIG_PORT', '5000')}
-ExecStart={sys.executable} web_config.py --host 0.0.0.0 --port {os.environ.get('WEB_CONFIG_PORT', '5000')}
+ExecStart={gunicorn_executable} --bind 0.0.0.0:{os.environ.get('WEB_CONFIG_PORT', '5000')} --workers 2 --timeout 120 web_config:app
 Restart=always
 RestartSec=10
 

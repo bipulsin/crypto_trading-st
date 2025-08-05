@@ -24,36 +24,52 @@ ssh -i your-key.pem ubuntu@43.206.219.70
 # Update system
 sudo apt update && sudo apt upgrade -y
 
-# Install Python and pip
-sudo apt install python3 python3-pip python3-venv -y
+# Check Python version (should be 3.10.2)
+python3 --version
 
-# Install Git
-sudo apt install git -y
-
-# Install Nginx (optional, for reverse proxy)
-sudo apt install nginx -y
+# Install Git and Nginx
+sudo apt install git nginx -y
 ```
 
-### **Step 3: Clone Your Repository**
+### **Step 3: Set Up Project Directory**
 
 ```bash
+# Check current directory
+pwd
+
+# Choose directory structure:
+# Option 1: Use current root directory (if files are already there)
+# Option 2: Move to ~/trading-bot directory (recommended)
+# Option 3: Create new ~/trading-bot directory
+
+# For Option 2 (recommended):
+mkdir -p ~/trading-bot
+cd ~/trading-bot
+
 # Clone your repository
 git clone https://github.com/bipulsin/crypto_trading-st.git
 cd crypto_trading-st
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+# Create or activate virtual environment
+if [ -d "venv" ]; then
+    source venv/bin/activate
+else
+    python3 -m venv venv
+    source venv/bin/activate
+fi
 ```
 
 ### **Step 4: Install Python Dependencies**
 
 ```bash
+# Verify Python version
+python3 --version
+
 # Install dependencies
 pip install -r requirements.txt
 
-# Install additional production dependencies
-pip install gunicorn flask-limiter pyopenssl
+# Verify virtual environment
+echo $VIRTUAL_ENV
 ```
 
 ### **Step 5: Configure Security**
@@ -97,6 +113,8 @@ python3 start_production_server.py
 ```
 
 Choose option 1 (Gunicorn) for production deployment.
+
+**Note**: The deployment script will automatically detect your current directory and Python setup, and create the systemd service with the correct paths.
 
 ### **Step 7: Test the Deployment**
 
