@@ -351,8 +351,8 @@ def process_fills_to_trades(df):
                         
                         # Calculate duration in hours
                         duration = (close_buy['Time'] - open_sell['Time']).total_seconds() / 3600
-                        
-                        trade = {
+
+            trade = {
                             'Entry Time': open_sell['Time'],
                             'Exit Time': close_buy['Time'],
                             'Entry ID': open_sell.get('Order ID', ''),
@@ -369,7 +369,7 @@ def process_fills_to_trades(df):
                             'Duration': round(duration, 2)
                         }
                         
-                        trades.append(trade)
+            trades.append(trade)
                         
                         # Mark both fills as processed
                         processed_indices.add(open_sell.name)

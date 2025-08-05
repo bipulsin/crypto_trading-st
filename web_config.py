@@ -7,9 +7,33 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_cors import CORS
 import config
+import os
+import hashlib
+import hmac
+import time
 
 app = Flask(__name__)
-CORS(app)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-change-this-in-production')
+
+# Configure CORS for production
+CORS(app, origins=[
+    'http://43.206.219.70',
+    'http://43.206.219.70:5000',
+    'https://43.206.219.70',
+    'https://43.206.219.70:5000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5000'
+])
+
+# Rate limiting
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
 
 # Configuration file path
 CONFIG_FILE = 'config.py'
@@ -17,6 +41,34 @@ BACKUP_DIR = 'config_backups'
 
 # Ensure backup directory exists
 os.makedirs(BACKUP_DIR, exist_ok=True)
+
+# Basic authentication
+def check_auth(username, password):
+    """Check if username/password combination is valid"""
+    # In production, use environment variables or database
+    expected_username = os.environ.get('WEB_CONFIG_USERNAME', 'admin')
+    expected_password = os.environ.get('WEB_CONFIG_PASSWORD', 'admin123')
+    
+    return username == expected_username and password == expected_password
+
+def authenticate():
+    """Send 401 response that enables basic auth"""
+    return jsonify({'error': 'Authentication required'}), 401, {
+        'WWW-Authenticate': 'Basic realm="Login Required"'
+    }
+
+def requires_auth(f):
+    """Decorator to require authentication"""
+    from functools import wraps
+    from flask import request, Response
+    
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
 
 def create_backup():
     """Create a backup of the current config file"""
@@ -93,18 +145,23 @@ def update_config_file(changes):
     return backup_file
 
 @app.route('/')
+@requires_auth
 def index():
     """Main configuration dashboard"""
     config_vars = get_config_variables()
     return render_template('config_dashboard.html', config_vars=config_vars)
 
 @app.route('/api/config', methods=['GET'])
+@requires_auth
+@limiter.limit("30 per minute")
 def get_config():
     """API endpoint to get current configuration"""
     config_vars = get_config_variables()
     return jsonify(config_vars)
 
 @app.route('/api/config', methods=['POST'])
+@requires_auth
+@limiter.limit("10 per minute")
 def update_config():
     """API endpoint to update configuration"""
     try:
@@ -221,7 +278,23 @@ def validate_config():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Trading Bot Web Configuration Server')
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to (default: 0.0.0.0)')
+    parser.add_argument('--port', type=int, default=5000, help='Port to bind to (default: 5000)')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--ssl', action='store_true', help='Enable SSL/HTTPS')
+    
+    args = parser.parse_args()
+    
     print("🌐 Starting Web Configuration Server...")
-    print("📱 Access the dashboard at: http://localhost:5000")
-    print("🔧 API endpoints available at: http://localhost:5000/api/")
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    print(f"📱 Access the dashboard at: http://{args.host}:{args.port}")
+    print(f"🔧 API endpoints available at: http://{args.host}:{args.port}/api/")
+    
+    if args.ssl:
+        print("🔒 SSL/HTTPS enabled")
+        # For SSL, you'll need to provide certificate files
+        app.run(host=args.host, port=args.port, debug=args.debug, ssl_context='adhoc')
+    else:
+        app.run(host=args.host, port=args.port, debug=args.debug) 
