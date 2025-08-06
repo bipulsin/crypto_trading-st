@@ -17,10 +17,10 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-change-this
 
 # Configure CORS for production
 CORS(app, origins=[
-    'http://43.206.219.70',
-    'http://43.206.219.70:5000',
-    'https://43.206.219.70',
-    'https://43.206.219.70:5000',
+    'http://13.115.183.85',
+    'http://13.115.183.85:5000',
+    'https://13.115.183.85',
+    'https://13.115.183.85:5000',
     'http://localhost:5000',
     'http://127.0.0.1:5000'
 ])
