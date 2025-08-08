@@ -98,6 +98,20 @@ def init_db():
         )
     ''')
     
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS strategy_status (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            strategy_name TEXT NOT NULL,
+            is_running BOOLEAN DEFAULT FALSE,
+            start_time TIMESTAMP,
+            stop_time TIMESTAMP,
+            pnl REAL DEFAULT 0.0,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -332,30 +346,143 @@ def update_user_settings():
         conn.close()
         return jsonify({'success': False, 'error': str(e)}), 400
 
+@app.route('/api/strategy/supertrend/config', methods=['GET'])
+@login_required
+def get_supertrend_config():
+    """Get SuperTrend strategy configuration for the current user"""
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT broker_connection_id, config_data, is_active
+        FROM strategy_configs 
+        WHERE user_id = ? AND strategy_name = 'supertrend'
+        ORDER BY updated_at DESC LIMIT 1
+    ''', (current_user.id,))
+    config = cursor.fetchone()
+    conn.close()
+    
+    if config:
+        import json
+        config_data = json.loads(config[1]) if config[1] else {}
+        return jsonify({
+            'broker_connection_id': config[0],
+            'config_data': config_data,
+            'is_active': bool(config[2])
+        })
+    return jsonify({})
+
+@app.route('/api/strategy/supertrend/config', methods=['POST'])
+@login_required
+def save_supertrend_config():
+    """Save SuperTrend strategy configuration"""
+    data = request.json
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    try:
+        import json
+        config_data = json.dumps({
+            'take_profit_multiplier': data.get('take_profit_multiplier', 2.0),
+            'trailing_stop': data.get('trailing_stop', True),
+            'candle_size': data.get('candle_size', '5m')
+        })
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO strategy_configs 
+            (user_id, strategy_name, broker_connection_id, config_data, is_active, updated_at)
+            VALUES (?, 'supertrend', ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (current_user.id, data.get('broker_connection_id'), config_data, data.get('is_active', False)))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Strategy configuration saved successfully'})
+    except Exception as e:
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
 @app.route('/api/strategy/supertrend/status', methods=['GET'])
 @login_required
 def get_supertrend_status():
-    # This would check if the strategy is running
-    # For now, return a mock status
-    return jsonify({
-        'is_running': False,
-        'pnl': 0.0,
-        'last_updated': datetime.now().isoformat()
-    })
+    """Get SuperTrend strategy status"""
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT is_running, start_time, stop_time, pnl, last_updated
+        FROM strategy_status 
+        WHERE user_id = ? AND strategy_name = 'supertrend'
+        ORDER BY last_updated DESC LIMIT 1
+    ''', (current_user.id,))
+    status = cursor.fetchone()
+    conn.close()
+    
+    if status:
+        return jsonify({
+            'is_running': bool(status[0]),
+            'start_time': status[1],
+            'stop_time': status[2],
+            'pnl': float(status[3]),
+            'last_updated': status[4]
+        })
+    else:
+        return jsonify({
+            'is_running': False,
+            'start_time': None,
+            'stop_time': None,
+            'pnl': 0.0,
+            'last_updated': datetime.now().isoformat()
+        })
 
 @app.route('/api/strategy/supertrend/toggle', methods=['POST'])
 @login_required
 def toggle_supertrend():
+    """Toggle SuperTrend strategy on/off"""
     data = request.json
     is_running = data.get('is_running', False)
     
-    # Here you would start/stop the strategy_st.py process
-    # For now, just return success
-    return jsonify({
-        'success': True,
-        'is_running': is_running,
-        'message': f'Strategy {"started" if is_running else "stopped"} successfully'
-    })
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    try:
+        if is_running:
+            # Start strategy
+            cursor.execute('''
+                INSERT OR REPLACE INTO strategy_status 
+                (user_id, strategy_name, is_running, start_time, last_updated)
+                VALUES (?, 'supertrend', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ''', (current_user.id,))
+            
+            # Update config to active
+            cursor.execute('''
+                UPDATE strategy_configs 
+                SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ? AND strategy_name = 'supertrend'
+            ''', (current_user.id,))
+        else:
+            # Stop strategy
+            cursor.execute('''
+                INSERT OR REPLACE INTO strategy_status 
+                (user_id, strategy_name, is_running, stop_time, last_updated)
+                VALUES (?, 'supertrend', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ''', (current_user.id,))
+            
+            # Update config to inactive
+            cursor.execute('''
+                UPDATE strategy_configs 
+                SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ? AND strategy_name = 'supertrend'
+            ''', (current_user.id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'is_running': is_running,
+            'message': f'Strategy {"started" if is_running else "stopped"} successfully'
+        })
+    except Exception as e:
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/market/prices')
 @login_required

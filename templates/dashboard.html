@@ -287,11 +287,18 @@
         .status-live {
             background: #d4edda;
             color: #155724;
+            animation: pulse 2s infinite;
         }
         
         .status-stopped {
             background: #f8d7da;
             color: #721c24;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
         }
         
         .toggle-switch {
@@ -631,14 +638,21 @@
         // Load SuperTrend content
         async function loadSupertrendContent() {
             try {
-                const [status, brokerConnections] = await Promise.all([
+                const [status, brokerConnections, config] = await Promise.all([
                     fetch('/api/strategy/supertrend/status').then(r => r.json()),
-                    fetch('/api/broker-connections').then(r => r.json())
+                    fetch('/api/broker-connections').then(r => r.json()),
+                    fetch('/api/strategy/supertrend/config').then(r => r.json())
                 ]);
                 
                 const brokerOptions = brokerConnections.map(broker => 
-                    `<option value="${broker.id}">${broker.connection_name} (${broker.broker_id})</option>`
+                    `<option value="${broker.id}" ${config.broker_connection_id == broker.id ? 'selected' : ''}>
+                        ${broker.connection_name} (${broker.broker_id})
+                    </option>`
                 ).join('');
+                
+                const configData = config.config_data || {};
+                const startTime = status.start_time ? new Date(status.start_time).toLocaleString() : 'Not started';
+                const lastUpdated = status.last_updated ? new Date(status.last_updated).toLocaleString() : 'Never';
                 
                 return `
                     <h2 class="mb-4">SuperTrend Strategy</h2>
@@ -647,6 +661,7 @@
                     <div class="strategy-header">
                         <div class="strategy-status">
                             <span class="status-badge ${status.is_running ? 'status-live' : 'status-stopped'}">
+                                <i class="fas ${status.is_running ? 'fa-play' : 'fa-stop'} me-2"></i>
                                 ${status.is_running ? 'LIVE' : 'STOPPED'}
                             </span>
                             <label class="toggle-switch">
@@ -654,10 +669,24 @@
                                 <span class="slider"></span>
                             </label>
                             <div class="ms-auto">
-                                <strong>P&L:</strong> $${status.pnl.toFixed(2)}
+                                <strong>P&L:</strong> <span class="${status.pnl >= 0 ? 'text-success' : 'text-danger'}">$${status.pnl.toFixed(2)}</span>
                             </div>
                         </div>
-                        <div class="text-muted">
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    <strong>Started:</strong> ${startTime}
+                                </small>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">
+                                    <i class="fas fa-sync me-1"></i>
+                                    <strong>Last Updated:</strong> ${lastUpdated}
+                                </small>
+                            </div>
+                        </div>
+                        <div class="text-muted mt-2">
                             <i class="fas fa-info-circle me-2"></i>
                             Ensure the correct configuration before switching ON
                         </div>
@@ -676,30 +705,35 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Take Profit Multiplier</label>
-                                <input type="number" class="form-control" id="takeProfitMultiplier" value="2.0" step="0.1">
+                                <input type="number" class="form-control" id="takeProfitMultiplier" value="${configData.take_profit_multiplier || 2.0}" step="0.1">
                             </div>
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Trailing Stop</label>
                                 <select class="form-select" id="trailingStop">
-                                    <option value="true">Enabled</option>
-                                    <option value="false">Disabled</option>
+                                    <option value="true" ${configData.trailing_stop !== false ? 'selected' : ''}>Enabled</option>
+                                    <option value="false" ${configData.trailing_stop === false ? 'selected' : ''}>Disabled</option>
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Candle Size/Duration</label>
                                 <select class="form-select" id="candleSize">
-                                    <option value="1m">1 Minute</option>
-                                    <option value="5m">5 Minutes</option>
-                                    <option value="15m">15 Minutes</option>
-                                    <option value="1h">1 Hour</option>
+                                    <option value="1m" ${configData.candle_size === '1m' ? 'selected' : ''}>1 Minute</option>
+                                    <option value="5m" ${configData.candle_size === '5m' || !configData.candle_size ? 'selected' : ''}>5 Minutes</option>
+                                    <option value="15m" ${configData.candle_size === '15m' ? 'selected' : ''}>15 Minutes</option>
+                                    <option value="1h" ${configData.candle_size === '1h' ? 'selected' : ''}>1 Hour</option>
                                 </select>
                             </div>
                         </div>
-                        <button class="btn btn-primary" onclick="saveStrategyConfig()">
-                            <i class="fas fa-save me-2"></i>Save Configuration
-                        </button>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" onclick="saveStrategyConfig()">
+                                <i class="fas fa-save me-2"></i>Save Configuration
+                            </button>
+                            <button class="btn btn-success" onclick="saveAndStartStrategy()">
+                                <i class="fas fa-play me-2"></i>Save & Start
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- Logs -->
@@ -919,13 +953,20 @@
                 
                 const result = await response.json();
                 if (result.success) {
-                    alert(result.message);
+                    // Show success message
+                    const message = isRunning ? 'Strategy started successfully!' : 'Strategy stopped successfully!';
+                    alert(message);
+                    // Reload the panel to show updated status
                     loadPanel('supertrend');
                 } else {
                     alert('Error: ' + result.error);
+                    // Revert the toggle if there was an error
+                    loadPanel('supertrend');
                 }
             } catch (error) {
                 alert('Error toggling strategy: ' + error.message);
+                // Revert the toggle if there was an error
+                loadPanel('supertrend');
             }
         }
         
@@ -947,8 +988,74 @@
         }
         
         // Save strategy config
-        function saveStrategyConfig() {
-            alert('Strategy configuration saved!');
+        async function saveStrategyConfig() {
+            const data = {
+                broker_connection_id: document.getElementById('brokerSelect').value,
+                take_profit_multiplier: parseFloat(document.getElementById('takeProfitMultiplier').value),
+                trailing_stop: document.getElementById('trailingStop').value === 'true',
+                candle_size: document.getElementById('candleSize').value,
+                is_active: false
+            };
+            
+            try {
+                const response = await fetch('/api/strategy/supertrend/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Strategy configuration saved successfully!');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error saving strategy configuration: ' + error.message);
+            }
+        }
+        
+        // Save and start strategy
+        async function saveAndStartStrategy() {
+            const data = {
+                broker_connection_id: document.getElementById('brokerSelect').value,
+                take_profit_multiplier: parseFloat(document.getElementById('takeProfitMultiplier').value),
+                trailing_stop: document.getElementById('trailingStop').value === 'true',
+                candle_size: document.getElementById('candleSize').value,
+                is_active: true
+            };
+            
+            try {
+                // First save configuration
+                const configResponse = await fetch('/api/strategy/supertrend/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const configResult = await configResponse.json();
+                if (!configResult.success) {
+                    alert('Error saving configuration: ' + configResult.error);
+                    return;
+                }
+                
+                // Then start strategy
+                const startResponse = await fetch('/api/strategy/supertrend/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_running: true })
+                });
+                
+                const startResult = await startResponse.json();
+                if (startResult.success) {
+                    alert('Strategy configuration saved and started successfully!');
+                    loadPanel('supertrend'); // Reload to show updated status
+                } else {
+                    alert('Error starting strategy: ' + startResult.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
         }
     </script>
 </body>
