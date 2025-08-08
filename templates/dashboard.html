@@ -416,7 +416,7 @@
     <!-- Title Section -->
     <div class="title-section">
         <div class="title-left">
-            <img src="/static/logo.jpg" alt="Trade Manthan Logo" class="logo">
+            <img src="/static/TradeMantan_Logo.png" alt="Trade Manthan Logo" class="logo">
             <div class="title-text">
                 <h1>Trade Manthan</h1>
                 <p>The automated trade platform</p>
@@ -631,7 +631,14 @@
         // Load SuperTrend content
         async function loadSupertrendContent() {
             try {
-                const status = await fetch('/api/strategy/supertrend/status').then(r => r.json());
+                const [status, brokerConnections] = await Promise.all([
+                    fetch('/api/strategy/supertrend/status').then(r => r.json()),
+                    fetch('/api/broker-connections').then(r => r.json())
+                ]);
+                
+                const brokerOptions = brokerConnections.map(broker => 
+                    `<option value="${broker.id}">${broker.connection_name} (${broker.broker_id})</option>`
+                ).join('');
                 
                 return `
                     <h2 class="mb-4">SuperTrend Strategy</h2>
@@ -664,6 +671,7 @@
                                 <label class="form-label">Broker Connection</label>
                                 <select class="form-select" id="brokerSelect">
                                     <option value="">Select Broker Connection</option>
+                                    ${brokerOptions}
                                 </select>
                             </div>
                             <div class="col-md-6 mb-3">
