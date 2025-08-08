@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade Manthan - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Title Section (15-20% of page) */
+        .title-section {
+            height: 18vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .title-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .logo {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            object-fit: cover;
+        }
+        
+        .title-text h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        
+        .title-text p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+        
+        .title-right {
+            text-align: right;
+        }
+        
+        .welcome-text {
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .datetime {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        /* Main Content Area */
+        .main-content {
+            height: 82vh;
+            display: flex;
+        }
+        
+        /* Left Sidebar (30% on desktop, hamburger on mobile) */
+        .sidebar {
+            width: 30%;
+            background: white;
+            border-right: 1px solid #e9ecef;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar-menu {
+            padding: 1rem 0;
+        }
+        
+        .menu-item {
+            padding: 0.75rem 1.5rem;
+            color: #495057;
+            text-decoration: none;
+            display: block;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+        }
+        
+        .menu-item:hover {
+            background-color: #f8f9fa;
+            color: #667eea;
+            border-left-color: #667eea;
+            text-decoration: none;
+        }
+        
+        .menu-item.active {
+            background-color: #e3f2fd;
+            color: #667eea;
+            border-left-color: #667eea;
+            font-weight: 600;
+        }
+        
+        .menu-item i {
+            width: 20px;
+            margin-right: 10px;
+        }
+        
+        .submenu {
+            padding-left: 2rem;
+            background-color: #f8f9fa;
+        }
+        
+        .submenu .menu-item {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+        
+        /* Right Content Panel (70% on desktop, full on mobile) */
+        .content-panel {
+            width: 70%;
+            background: #f8f9fa;
+            overflow-y: auto;
+            padding: 2rem;
+        }
+        
+        /* Mobile Responsive */
+        .mobile-toggle {
+            display: none;
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 1000;
+            background: #667eea;
+            border: none;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-toggle {
+                display: block;
+            }
+            
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                width: 280px;
+                z-index: 999;
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .content-panel {
+                width: 100%;
+                margin-left: 0;
+            }
+            
+            .title-section {
+                padding: 1rem;
+            }
+            
+            .title-text h1 {
+                font-size: 1.5rem;
+            }
+            
+            .title-text p {
+                font-size: 0.9rem;
+            }
+        }
+        
+        /* Dashboard Content Styles */
+        .broker-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .broker-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .broker-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .broker-details h5 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        
+        .broker-details p {
+            margin: 0;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        .wallet-info {
+            text-align: right;
+        }
+        
+        .wallet-balance {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        
+        .market-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 0.5rem;
+            min-width: 200px;
+            text-align: center;
+        }
+        
+        .market-symbol {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        
+        .market-price {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #28a745;
+        }
+        
+        .market-scroll {
+            display: flex;
+            overflow-x: auto;
+            padding: 1rem 0;
+            gap: 1rem;
+        }
+        
+        /* Strategy Panel Styles */
+        .strategy-header {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .strategy-status {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .status-live {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .config-section {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .logs-section {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .logs-content {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        /* Broker Setup Styles */
+        .broker-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .add-broker-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .add-broker-btn:hover {
+            background: #c82333;
+            transform: scale(1.1);
+        }
+        
+        .broker-form {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            display: none;
+        }
+        
+        .broker-form.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Toggle Button -->
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <!-- Title Section -->
+    <div class="title-section">
+        <div class="title-left">
+            <img src="/static/logo.jpg" alt="Trade Manthan Logo" class="logo">
+            <div class="title-text">
+                <h1>Trade Manthan</h1>
+                <p>The automated trade platform</p>
+            </div>
+        </div>
+        <div class="title-right">
+            <div class="welcome-text">Welcome, <span id="userName">User</span></div>
+            <div class="datetime" id="currentDateTime"></div>
+        </div>
+    </div>
+    
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <!-- Left Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-menu">
+                <a href="#" class="menu-item active" onclick="loadPanel('dashboard')">
+                    <i class="fas fa-tachometer-alt"></i>Dashboard
+                </a>
+                <a href="#" class="menu-item" onclick="toggleSubmenu('strategy')">
+                    <i class="fas fa-chart-line"></i>Strategy
+                </a>
+                <div class="submenu" id="strategy-submenu" style="display: none;">
+                    <a href="#" class="menu-item" onclick="loadPanel('supertrend')">
+                        <i class="fas fa-wave-square"></i>Supertrend
+                    </a>
+                    <a href="#" class="menu-item" onclick="loadPanel('rsi-ema')">
+                        <i class="fas fa-chart-area"></i>RSI - EMA
+                    </a>
+                    <a href="#" class="menu-item" onclick="loadPanel('bollinger')">
+                        <i class="fas fa-chart-bar"></i>Bollinger Band
+                    </a>
+                </div>
+                <a href="#" class="menu-item" onclick="loadPanel('broker')">
+                    <i class="fas fa-university"></i>Broker Setup
+                </a>
+                <a href="#" class="menu-item" onclick="loadPanel('settings')">
+                    <i class="fas fa-cog"></i>Settings
+                </a>
+                <a href="#" class="menu-item" onclick="loadPanel('reports')">
+                    <i class="fas fa-file-alt"></i>Reports
+                </a>
+                <a href="/logout" class="menu-item">
+                    <i class="fas fa-sign-out-alt"></i>Logout
+                </a>
+            </div>
+        </div>
+        
+        <!-- Right Content Panel -->
+        <div class="content-panel" id="contentPanel">
+            <!-- Dashboard content will be loaded here -->
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let currentPanel = 'dashboard';
+        let userProfile = {};
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUserProfile();
+            updateDateTime();
+            loadPanel('dashboard');
+            setInterval(updateDateTime, 1000);
+        });
+        
+        // Load user profile
+        async function loadUserProfile() {
+            try {
+                const response = await fetch('/api/user/profile');
+                userProfile = await response.json();
+                document.getElementById('userName').textContent = userProfile.name;
+            } catch (error) {
+                console.error('Error loading user profile:', error);
+            }
+        }
+        
+        // Update date and time
+        function updateDateTime() {
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            };
+            document.getElementById('currentDateTime').textContent = now.toLocaleDateString('en-US', options);
+        }
+        
+        // Toggle sidebar on mobile
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('show');
+        }
+        
+        // Toggle submenu
+        function toggleSubmenu(menuName) {
+            const submenu = document.getElementById(menuName + '-submenu');
+            submenu.style.display = submenu.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        // Load different panels
+        async function loadPanel(panelName) {
+            currentPanel = panelName;
+            
+            // Update active menu item
+            document.querySelectorAll('.menu-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Close sidebar on mobile
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('show');
+            }
+            
+            const contentPanel = document.getElementById('contentPanel');
+            
+            switch(panelName) {
+                case 'dashboard':
+                    contentPanel.innerHTML = await loadDashboardContent();
+                    break;
+                case 'supertrend':
+                    contentPanel.innerHTML = await loadSupertrendContent();
+                    break;
+                case 'broker':
+                    contentPanel.innerHTML = await loadBrokerContent();
+                    break;
+                case 'settings':
+                    contentPanel.innerHTML = await loadSettingsContent();
+                    break;
+                default:
+                    contentPanel.innerHTML = '<div class="text-center mt-5"><h3>Coming Soon</h3><p>This feature is under development.</p></div>';
+            }
+        }
+        
+        // Load dashboard content
+        async function loadDashboardContent() {
+            try {
+                const [brokerConnections, marketPrices] = await Promise.all([
+                    fetch('/api/broker-connections').then(r => r.json()),
+                    fetch('/api/market/prices').then(r => r.json())
+                ]);
+                
+                return `
+                    <h2 class="mb-4">Dashboard</h2>
+                    
+                    <!-- Broker Connections -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h4 class="mb-3">Broker Connections</h4>
+                            <div class="row">
+                                ${brokerConnections.map(broker => `
+                                    <div class="col-md-4 mb-3">
+                                        <div class="broker-card">
+                                            <div class="broker-info">
+                                                <div class="broker-logo">
+                                                    <i class="fas fa-university"></i>
+                                                </div>
+                                                <div class="broker-details">
+                                                    <h5>${broker.connection_name}</h5>
+                                                    <p>${broker.broker_id}</p>
+                                                </div>
+                                            </div>
+                                            <div class="wallet-info">
+                                                <div class="wallet-balance">$10,000.00</div>
+                                                <div>Total P&L: +$250.00</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                                ${brokerConnections.length === 0 ? `
+                                    <div class="col-12">
+                                        <div class="text-center p-4">
+                                            <i class="fas fa-university fa-3x text-muted mb-3"></i>
+                                            <h5>No Broker Connections</h5>
+                                            <p class="text-muted">Add your first broker connection to get started.</p>
+                                            <button class="btn btn-primary" onclick="loadPanel('broker')">
+                                                <i class="fas fa-plus me-2"></i>Add Broker
+                                            </button>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Market Updates -->
+                    <div class="row">
+                        <div class="col-12">
+                            <h4 class="mb-3">Market Updates</h4>
+                            <div class="market-scroll">
+                                ${marketPrices.map(coin => `
+                                    <div class="market-card">
+                                        <div class="market-symbol">${coin.symbol}</div>
+                                        <div class="market-name">${coin.name}</div>
+                                        <div class="market-price">$${coin.price.toLocaleString()}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                return '<div class="alert alert-danger">Error loading dashboard content.</div>';
+            }
+        }
+        
+        // Load SuperTrend content
+        async function loadSupertrendContent() {
+            try {
+                const status = await fetch('/api/strategy/supertrend/status').then(r => r.json());
+                
+                return `
+                    <h2 class="mb-4">SuperTrend Strategy</h2>
+                    
+                    <!-- Strategy Header -->
+                    <div class="strategy-header">
+                        <div class="strategy-status">
+                            <span class="status-badge ${status.is_running ? 'status-live' : 'status-stopped'}">
+                                ${status.is_running ? 'LIVE' : 'STOPPED'}
+                            </span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${status.is_running ? 'checked' : ''} onchange="toggleStrategy(this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                            <div class="ms-auto">
+                                <strong>P&L:</strong> $${status.pnl.toFixed(2)}
+                            </div>
+                        </div>
+                        <div class="text-muted">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Ensure the correct configuration before switching ON
+                        </div>
+                    </div>
+                    
+                    <!-- Configuration -->
+                    <div class="config-section">
+                        <h4 class="mb-3">Configuration</h4>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Broker Connection</label>
+                                <select class="form-select" id="brokerSelect">
+                                    <option value="">Select Broker Connection</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Take Profit Multiplier</label>
+                                <input type="number" class="form-control" id="takeProfitMultiplier" value="2.0" step="0.1">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Trailing Stop</label>
+                                <select class="form-select" id="trailingStop">
+                                    <option value="true">Enabled</option>
+                                    <option value="false">Disabled</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Candle Size/Duration</label>
+                                <select class="form-select" id="candleSize">
+                                    <option value="1m">1 Minute</option>
+                                    <option value="5m">5 Minutes</option>
+                                    <option value="15m">15 Minutes</option>
+                                    <option value="1h">1 Hour</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveStrategyConfig()">
+                            <i class="fas fa-save me-2"></i>Save Configuration
+                        </button>
+                    </div>
+                    
+                    <!-- Logs -->
+                    <div class="logs-section">
+                        <h4 class="mb-3" onclick="toggleLogs()" style="cursor: pointer;">
+                            <i class="fas fa-chevron-down me-2"></i>LOGS
+                        </h4>
+                        <div class="logs-content" id="logsContent" style="display: none;">
+                            <div class="text-muted">Loading logs...</div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading SuperTrend:', error);
+                return '<div class="alert alert-danger">Error loading SuperTrend content.</div>';
+            }
+        }
+        
+        // Load broker content
+        async function loadBrokerContent() {
+            try {
+                const connections = await fetch('/api/broker-connections').then(r => r.json());
+                
+                return `
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2>Broker Connection Setup</h2>
+                        <button class="add-broker-btn" onclick="toggleBrokerForm()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Add Broker Form -->
+                    <div class="broker-form" id="brokerForm">
+                        <h4 class="mb-3">Add New Broker Connection</h4>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Broker Connection Name</label>
+                                <input type="text" class="form-control" id="connectionName" placeholder="e.g., Delta Exchange">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Broker ID</label>
+                                <input type="text" class="form-control" id="brokerId" placeholder="e.g., delta">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Broker API URL</label>
+                                <input type="url" class="form-control" id="brokerUrl" placeholder="https://api.delta.exchange">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">API Key</label>
+                                <input type="text" class="form-control" id="apiKey" placeholder="Your API Key">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">API Secret</label>
+                                <input type="password" class="form-control" id="apiSecret" placeholder="Your API Secret">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-secondary" onclick="toggleBrokerForm()">Cancel</button>
+                            <button class="btn btn-primary" onclick="saveBrokerConnection()">Submit</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Broker Connections Table -->
+                    <div class="broker-table">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Broker Connection Name</th>
+                                    <th>Broker ID</th>
+                                    <th>Broker URL</th>
+                                    <th>API Key</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${connections.map(conn => `
+                                    <tr>
+                                        <td>${conn.connection_name}</td>
+                                        <td>${conn.broker_id}</td>
+                                        <td>${conn.broker_url}</td>
+                                        <td>${conn.api_key}</td>
+                                        <td>${new Date(conn.created_at).toLocaleDateString()}</td>
+                                    </tr>
+                                `).join('')}
+                                ${connections.length === 0 ? `
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">
+                                            No broker connections found. Click the + button to add one.
+                                        </td>
+                                    </tr>
+                                ` : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading broker content:', error);
+                return '<div class="alert alert-danger">Error loading broker content.</div>';
+            }
+        }
+        
+        // Load settings content
+        async function loadSettingsContent() {
+            try {
+                const settings = await fetch('/api/user/settings').then(r => r.json());
+                
+                return `
+                    <h2 class="mb-4">Settings</h2>
+                    
+                    <div class="config-section">
+                        <h4 class="mb-3">General Settings</h4>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Leverage</label>
+                                <input type="number" class="form-control" id="leverage" value="${settings.leverage || 10}" min="1" max="100">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Position Size (%)</label>
+                                <input type="number" class="form-control" id="positionSize" value="${(settings.position_size_percent || 0.1) * 100}" min="1" max="100" step="1">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Default Capital</label>
+                                <input type="number" class="form-control" id="defaultCapital" value="${settings.default_capital || 1000}" min="100" step="100">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Max Capital Loss (%)</label>
+                                <input type="number" class="form-control" id="maxLoss" value="${settings.max_capital_loss_percent || 5}" min="1" max="50" step="1">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveSettings()">
+                            <i class="fas fa-save me-2"></i>Save Settings
+                        </button>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                return '<div class="alert alert-danger">Error loading settings.</div>';
+            }
+        }
+        
+        // Toggle broker form
+        function toggleBrokerForm() {
+            const form = document.getElementById('brokerForm');
+            form.classList.toggle('show');
+        }
+        
+        // Save broker connection
+        async function saveBrokerConnection() {
+            const data = {
+                connection_name: document.getElementById('connectionName').value,
+                broker_id: document.getElementById('brokerId').value,
+                broker_url: document.getElementById('brokerUrl').value,
+                api_key: document.getElementById('apiKey').value,
+                api_secret: document.getElementById('apiSecret').value
+            };
+            
+            try {
+                const response = await fetch('/api/broker-connections', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Broker connection created successfully!');
+                    loadPanel('broker');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error saving broker connection: ' + error.message);
+            }
+        }
+        
+        // Save settings
+        async function saveSettings() {
+            const data = {
+                leverage: parseInt(document.getElementById('leverage').value),
+                position_size_percent: parseFloat(document.getElementById('positionSize').value) / 100,
+                default_capital: parseFloat(document.getElementById('defaultCapital').value),
+                max_capital_loss_percent: parseFloat(document.getElementById('maxLoss').value)
+            };
+            
+            try {
+                const response = await fetch('/api/user/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Settings saved successfully!');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error saving settings: ' + error.message);
+            }
+        }
+        
+        // Toggle strategy
+        async function toggleStrategy(isRunning) {
+            try {
+                const response = await fetch('/api/strategy/supertrend/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_running: isRunning })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadPanel('supertrend');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error toggling strategy: ' + error.message);
+            }
+        }
+        
+        // Toggle logs
+        function toggleLogs() {
+            const logsContent = document.getElementById('logsContent');
+            const isVisible = logsContent.style.display !== 'none';
+            logsContent.style.display = isVisible ? 'none' : 'block';
+            
+            if (!isVisible) {
+                // Load logs here
+                logsContent.innerHTML = `
+                    <div>[2024-01-15 10:30:15] Strategy initialized</div>
+                    <div>[2024-01-15 10:30:20] Connected to broker</div>
+                    <div>[2024-01-15 10:30:25] Monitoring market data</div>
+                    <div>[2024-01-15 10:31:00] No trading signals detected</div>
+                `;
+            }
+        }
+        
+        // Save strategy config
+        function saveStrategyConfig() {
+            alert('Strategy configuration saved!');
+        }
+    </script>
+</body>
+</html>

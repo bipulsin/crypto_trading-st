@@ -12,7 +12,7 @@ import hashlib
 import hmac
 import time
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-change-this-in-production')
 
 # Configure CORS for production

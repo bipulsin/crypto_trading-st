@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Bot Configuration</title>
+    <title>Trade Manthan - Trading Bot Configuration</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -50,18 +50,52 @@
             color: #6c757d;
             margin-top: 5px;
         }
+        .header-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .header-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        .header-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, #ffffff, #f8f9fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .header-subtitle {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.1rem;
+            font-weight: 300;
+        }
     </style>
 </head>
 <body>
     <div class="container-fluid py-4">
         <div class="row justify-content-center">
             <div class="col-lg-10">
-                <!-- Header -->
-                <div class="text-center mb-4">
-                    <h1 class="text-white mb-2">
-                        <i class="fas fa-cog me-2"></i>Trading Bot Configuration
-                    </h1>
-                    <p class="text-white-50">Manage your trading bot settings through this web interface</p>
+                <!-- Header with Logo and Title -->
+                <div class="header-section">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <img src="/static/logo.jpg" alt="Trade Manthan Logo" class="header-logo">
+                        </div>
+                        <div class="col">
+                            <h1 class="header-title mb-2">Trade Manthan</h1>
+                            <p class="header-subtitle mb-0">Advanced Trading Bot Configuration Dashboard</p>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Alerts -->
