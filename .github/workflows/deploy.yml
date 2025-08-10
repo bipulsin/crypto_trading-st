@@ -1,0 +1,173 @@
+name: Deploy to EC2 and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests
+      run: |
+        python -c "import app; print('App imports successfully')"
+        python -c "import strategy_manager; print('Strategy manager imports successfully')"
+        python -c "import strategy_st; print('Strategy ST imports successfully')"
+    
+    - name: Check code quality
+      run: |
+        # Basic syntax check
+        python -m py_compile app.py strategy_manager.py strategy_st.py
+        
+        # Check for common issues
+        if grep -r "TODO\|FIXME\|XXX" . --exclude-dir=.git --exclude-dir=venv; then
+          echo "Found TODO/FIXME items - please address them"
+          exit 1
+        fi
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Deploy to EC2
+      env:
+        EC2_HOST: ${{ secrets.EC2_HOST }}
+        EC2_USER: ${{ secrets.EC2_USER }}
+        PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+      run: |
+        # Create SSH key file
+        echo "$PRIVATE_KEY" > deploy_key.pem
+        chmod 600 deploy_key.pem
+        
+        # Deploy to EC2
+        ssh -i deploy_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+          # Navigate to project directory
+          cd /home/ubuntu/trade_manthan_web
+          
+          # Backup current state
+          sudo cp app.py app.py.backup.$(date +%Y%m%d_%H%M%S)
+          sudo cp strategy_manager.py strategy_manager.py.backup.$(date +%Y%m%d_%H%M%S)
+          sudo cp strategy_st.py strategy_st.py.backup.$(date +%Y%m%d_%H%M%S)
+          sudo cp requirements.txt requirements.txt.backup.$(date +%Y%m%d_%H%M%S)
+          
+          # Pull latest changes
+          git stash
+          git pull origin main
+          git stash pop
+          
+          # Install new dependencies
+          source venv/bin/activate
+          pip install -r requirements.txt
+          
+          # Initialize database if needed
+          python3 -c "
+import sqlite3
+conn = sqlite3.connect('users.db')
+cursor = conn.cursor()
+
+# Create strategy_status table if it doesn't exist
+cursor.execute('''CREATE TABLE IF NOT EXISTS strategy_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    strategy_name TEXT NOT NULL,
+    is_running BOOLEAN DEFAULT FALSE,
+    process_id INTEGER,
+    start_time TIMESTAMP,
+    stop_time TIMESTAMP,
+    pnl REAL DEFAULT 0.0,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)''')
+
+# Create strategy_logs table if it doesn't exist
+cursor.execute('''CREATE TABLE IF NOT EXISTS strategy_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    strategy_name TEXT NOT NULL,
+    log_level TEXT NOT NULL,
+    message TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)''')
+
+conn.commit()
+conn.close()
+print('Database tables initialized successfully')
+"
+          
+          # Restart the service
+          sudo systemctl restart trade-manthan-web
+          
+          # Wait for service to start
+          sleep 10
+          
+          # Check service status
+          sudo systemctl status trade-manthan-web
+        EOF
+        
+        # Clean up SSH key
+        rm -f deploy_key.pem
+    
+    - name: Run automated tests
+      env:
+        EC2_HOST: ${{ secrets.EC2_HOST }}
+      run: |
+        # Wait for deployment to complete
+        sleep 30
+        
+        # Test application health
+        echo "Testing application health..."
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$EC2_HOST || echo "000")
+        
+        if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ]; then
+          echo "✅ Application is responding successfully (Status: $HTTP_STATUS)"
+        else
+          echo "❌ Application is not responding properly (Status: $HTTP_STATUS)"
+          exit 1
+        fi
+        
+        # Test strategy endpoints
+        echo "Testing strategy endpoints..."
+        STRATEGY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$EC2_HOST/api/strategy/supertrend/status || echo "000")
+        
+        if [ "$STRATEGY_STATUS" = "200" ] || [ "$STRATEGY_STATUS" = "401" ]; then
+          echo "✅ Strategy endpoints are working (Status: $STRATEGY_STATUS)"
+        else
+          echo "❌ Strategy endpoints are not working (Status: $STRATEGY_STATUS)"
+          exit 1
+        fi
+        
+        # Test nginx configuration
+        echo "Testing nginx configuration..."
+        NGINX_TEST=$(ssh -i deploy_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "sudo nginx -t" 2>&1)
+        
+        if echo "$NGINX_TEST" | grep -q "syntax is ok"; then
+          echo "✅ Nginx configuration is valid"
+        else
+          echo "❌ Nginx configuration has issues: $NGINX_TEST"
+          exit 1
+        fi
+    
+    - name: Notify deployment status
+      run: |
+        echo "🚀 Deployment completed successfully!"
+        echo "📊 Application URL: http://${{ secrets.EC2_HOST }}"
+        echo "🔍 Service Status: Active"
+        echo "✅ All tests passed"

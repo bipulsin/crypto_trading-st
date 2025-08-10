@@ -4,10 +4,22 @@ import hashlib
 import hmac
 import json
 import pandas as pd
-from config import API_KEY, API_SECRET, BASE_URL, SYMBOL_ID, SYMBOL, ASSET_ID, LIVE_API_KEY, LIVE_API_SECRET, LIVE_BASE_URL, LIVE_SYMBOL_ID
+import os
 import threading
 import concurrent.futures
 from logger import get_logger
+
+# Get configuration from environment variables
+API_KEY = os.getenv('API_KEY', '')
+API_SECRET = os.getenv('API_SECRET', '')
+BASE_URL = os.getenv('BASE_URL', 'https://api.delta.exchange')
+SYMBOL_ID = os.getenv('SYMBOL_ID', '1')
+SYMBOL = os.getenv('SYMBOL', 'BTCUSDT')
+ASSET_ID = os.getenv('ASSET_ID', '3')
+LIVE_API_KEY = os.getenv('LIVE_API_KEY', '')
+LIVE_API_SECRET = os.getenv('LIVE_API_SECRET', '')
+LIVE_BASE_URL = os.getenv('LIVE_BASE_URL', 'https://api.delta.exchange')
+LIVE_SYMBOL_ID = os.getenv('LIVE_SYMBOL_ID', '27')
 
 # Set up logger
 logger = get_logger('delta_api', 'logs/delta_api.log')

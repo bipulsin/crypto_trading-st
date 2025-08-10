@@ -98,59 +98,23 @@ delta_fills_history.csv
 data/
 logs/
 
+# Test files
+test_*.db
+test_*.log
+*.test
+
 # Backup files
-config_backups/
 *.backup
 *.bak
+*.old
+*.orig
 
-# Test files
-test_*.py
-*_test.py
-
-# Installation and troubleshooting files
-*_setup.sh
-*_install.sh
-*_deploy.sh
-*_update.sh
-*_fix.sh
-*_troubleshoot.sh
-*_service.sh
-*_venv.sh
-*_ip.sh
-*_complete.sh
-*_current.sh
-*_manual.sh
-*_quick.sh
-*_simple.sh
-
-# Documentation files for installation/troubleshooting
-*_SETUP.md
-*_INSTALL.md
-*_DEPLOY.md
-*_UPDATE.md
-*_FIX.md
-*_TROUBLESHOOT.md
-*_SERVICE.md
-*_VENV.md
-*_IP.md
-*_COMPLETE.md
-*_CURRENT.md
-*_MANUAL.md
-*_QUICK.md
-*_SIMPLE.md
-*_GUIDE.md
-
-# Systemd service files (should only exist on server)
-*.service
-
-# IDE
-.vscode/
-.idea/
+# Temporary files
+*.tmp
 *.swp
 *.swo
 *~
 
-# Temporary files
-*.tmp
-*.bak
-*.backup
+# Deployment files
+deploy_key.pem
+*.tar.gz

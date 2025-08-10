@@ -2,33 +2,72 @@ import requests
 import pandas as pd
 import time
 import logging
+import argparse
+import os
+import sys
+import json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from typing import Dict, List, Optional
-from config import BASE_URL, API_KEY, API_SECRET, SYMBOL_ID, SYMBOL, LIVE_BASE_URL, LEVERAGE, ST_WITH_TRAILING
-from delta_api import DeltaAPI
-from supertrend import calculate_supertrend_enhanced
 
 # Load environment variables
 load_dotenv()
 
+# Add current directory to Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Get configuration from environment variables (set by strategy manager)
+BASE_URL = os.getenv('BASE_URL', 'https://api.delta.exchange')
+API_KEY = os.getenv('API_KEY', '')
+API_SECRET = os.getenv('API_SECRET', '')
+SYMBOL_ID = os.getenv('SYMBOL_ID', '1')
+SYMBOL = os.getenv('SYMBOL', 'BTCUSDT')
+LEVERAGE = int(os.getenv('LEVERAGE', '1'))
+ST_WITH_TRAILING = os.getenv('ST_WITH_TRAILING', 'false').lower() == 'true'
+
+# Strategy-specific configuration from database
+STRATEGY_TAKE_PROFIT_MULTIPLIER = float(os.getenv('STRATEGY_TAKE_PROFIT_MULTIPLIER', '1.5'))
+STRATEGY_TRAILING_STOP = os.getenv('STRATEGY_TRAILING_STOP', 'false').lower() == 'true'
+STRATEGY_CANDLE_SIZE = os.getenv('STRATEGY_CANDLE_SIZE', '5m')
+
+# Debug: Print environment variables
+print(f"=== ENVIRONMENT VARIABLES ===")
+print(f"BASE_URL: {BASE_URL}")
+print(f"API_KEY: {API_KEY[:10] if API_KEY else 'Not set'}...")
+print(f"SYMBOL_ID: {SYMBOL_ID}")
+print(f"STRATEGY_CANDLE_SIZE: {STRATEGY_CANDLE_SIZE}")
+print(f"STRATEGY_TAKE_PROFIT_MULTIPLIER: {STRATEGY_TAKE_PROFIT_MULTIPLIER}")
+print(f"STRATEGY_TRAILING_STOP: {STRATEGY_TRAILING_STOP}")
+print("================================")
+
+try:
+    from delta_api import DeltaAPI
+    from supertrend import calculate_supertrend_enhanced, calculate_supertrend_manual
+except ImportError as e:
+    print(f"Error importing modules: {e}")
+    sys.exit(1)
+
 class DeltaExchangeBot:
-    def __init__(self):
+    def __init__(self, user_id=None, strategy_name=None):
         # Initialize Delta API
         self.api = DeltaAPI()
+        
+        # Store user_id and strategy_name
+        self.user_id = user_id or os.environ.get('USER_ID')
+        self.strategy_name = strategy_name or os.environ.get('STRATEGY_NAME', 'supertrend')
         
         # Trading Configuration
         self.symbol = SYMBOL
         self.product_id = SYMBOL_ID
-        self.resolution = '5m'
+        self.resolution = STRATEGY_CANDLE_SIZE # Use strategy-specific candle size
         
-        # SuperTrend Parameters
-        self.st_period = 10
-        self.st_multiplier = 3
+        # SuperTrend Parameters - try to get from environment, fallback to defaults
+        self.st_period = int(os.environ.get('ST_PERIOD', '10'))
+        self.st_multiplier = float(os.environ.get('ST_MULTIPLIER', '3.0'))
         
         # Risk Management
         self.position_size_pct = 0.5  # 50% of available balance
-        self.take_profit_multiplier = 1.5  # 1.5x risk-reward
+        self.take_profit_multiplier = STRATEGY_TAKE_PROFIT_MULTIPLIER # Use strategy-specific take profit multiplier
         self.leverage = LEVERAGE  # Use leverage from config
         
         # State Management
@@ -37,25 +76,29 @@ class DeltaExchangeBot:
         self.iteration_count = 0
         
         # Trailing Stop Loss Configuration
-        self.st_with_trailing = ST_WITH_TRAILING  # Use config variable for trailing stop
+        self.st_with_trailing = STRATEGY_TRAILING_STOP # Use strategy-specific trailing stop
         self.trailing_stop_distance = 100  # 100 points trailing distance (fallback)
         
         # Setup logging
         self.setup_logging()
         
-        # Validate credentials by testing API connection
-        self.validate_api_connection()
+        # Don't validate API connection during initialization to avoid blocking startup
+        # API connection will be validated when needed during trading operations
         
-        self.logger.info("Delta Exchange SuperTrend Bot initialized")
+        self.logger.info(f"Delta Exchange SuperTrend Bot initialized for user {self.user_id}")
         self.logger.info(f"Trading Symbol: {self.symbol}")
         self.logger.info(f"SuperTrend Parameters: Period={self.st_period}, Multiplier={self.st_multiplier}")
         self.logger.info(f"Trailing Stop Configuration: {'Enabled' if self.st_with_trailing else 'Disabled'}")
+        
+        # Try to load strategy configuration from database if available
+        self.load_strategy_config()
 
     def setup_logging(self):
         """Setup comprehensive logging"""
         # Create log filename with current date and time
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f'supertrend_bot_{timestamp}.log'
+        user_suffix = f"_user_{self.user_id}" if self.user_id else ""
+        log_filename = f'supertrend_bot{user_suffix}_{timestamp}.log'
         
         logging.basicConfig(
             level=logging.INFO,
@@ -67,14 +110,88 @@ class DeltaExchangeBot:
         )
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"Log file created: {log_filename}")
+        
+        # Also log to database if strategy manager is available
+        try:
+            # Add the current directory to Python path to find strategy_manager
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            if current_dir not in sys.path:
+                sys.path.insert(0, current_dir)
+            
+            from strategy_manager import strategy_manager
+            if strategy_manager and self.user_id:
+                # Create a custom handler for database logging
+                class DatabaseHandler(logging.Handler):
+                    def __init__(self, strategy_manager, user_id, strategy_name):
+                        super().__init__()
+                        self.strategy_manager = strategy_manager
+                        self.user_id = user_id
+                        self.strategy_name = strategy_name
+                    
+                    def emit(self, record):
+                        try:
+                            # Convert log level to string
+                            level = record.levelname
+                            message = self.format(record)
+                            
+                            # Log to database
+                            self.strategy_manager.log_strategy_event(
+                                self.user_id, 
+                                self.strategy_name, 
+                                level, 
+                                message
+                            )
+                        except Exception:
+                            # Silently fail if database logging fails
+                            pass
+                
+                # Add database handler
+                db_handler = DatabaseHandler(strategy_manager, self.user_id, self.strategy_name)
+                db_handler.setFormatter(logging.Formatter('%(message)s'))
+                self.logger.addHandler(db_handler)
+                self.logger.info("Database logging enabled")
+        except ImportError as e:
+            # Strategy manager not available, continue without database logging
+            self.logger.info(f"Database logging not available: {e}")
+        except Exception as e:
+            self.logger.warning(f"Failed to setup database logging: {e}")
 
     def get_ohlc_data(self, limit: int = 100) -> pd.DataFrame:
         """Fetch OHLC data using delta_api"""
         return self.api.get_ohlc_data(symbol=self.symbol, resolution=self.resolution, limit=limit)
 
     def calculate_supertrend(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate SuperTrend using supertrend module"""
-        return calculate_supertrend_enhanced(df, self.st_period, self.st_multiplier, self.logger)
+        """Calculate SuperTrend using supertrend module with fallback"""
+        try:
+            # Try enhanced calculation first
+            result = calculate_supertrend_enhanced(df, self.st_period, self.st_multiplier, self.logger)
+            
+            # Check if calculation was successful
+            if 'trend_direction' in result.columns and 'supertrend_value' in result.columns:
+                if not result[['trend_direction', 'supertrend_value']].isnull().all().all():
+                    return result
+            
+            # If enhanced calculation failed, try manual calculation
+            self.logger.warning("Enhanced SuperTrend calculation failed, trying manual calculation...")
+            result = calculate_supertrend_manual(df, self.st_period, self.st_multiplier, self.logger)
+            
+            if 'trend_direction' in result.columns and 'supertrend_value' in result.columns:
+                if not result[['trend_direction', 'supertrend_value']].isnull().all().all():
+                    self.logger.info("Manual SuperTrend calculation successful")
+                    return result
+            
+            # If both methods failed, return original dataframe with error columns
+            self.logger.error("Both SuperTrend calculation methods failed")
+            result['trend_direction'] = 0
+            result['supertrend_value'] = 0
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error in SuperTrend calculation: {e}")
+            # Return original dataframe with default values
+            df['trend_direction'] = 0
+            df['supertrend_value'] = 0
+            return df
 
     def get_wallet_balance(self) -> float:
         """Get wallet balance using delta_api"""
@@ -98,13 +215,7 @@ class DeltaExchangeBot:
             position_size = 0.001
             
         # Round to 3 decimal places for BTC precision
-        position_size = round(position_size, 3)
-        
-        # Multiply by 1000 for order placement (convert BTC to lot units)
-        order_size = position_size * 1000
-            
-        self.logger.info(f"Calculated position size: {position_size} BTC = {order_size} lots (balance: {balance}, price: {price})")
-        return order_size
+        return round(position_size, 3)
 
     def place_market_order(self, side: str, size: float, stop_loss: float = None, take_profit: float = None, current_price: float = None) -> Optional[Dict]:
         """Place market order using delta_api"""
@@ -143,11 +254,30 @@ class DeltaExchangeBot:
             self.logger.error(f"❌ API connection failed: {e}")
             raise ValueError("API_KEY and API_SECRET must be set correctly in environment variables")
 
-
-
-
-
-
+    def load_strategy_config(self):
+        """Load strategy configuration from database if available"""
+        try:
+            # This would typically connect to a database to load user-specific strategy settings
+            # For now, we'll use environment variables as fallback
+            if os.environ.get('STRATEGY_ST_PERIOD'):
+                self.st_period = int(os.environ.get('STRATEGY_ST_PERIOD'))
+                self.logger.info(f"Updated SuperTrend period from config: {self.st_period}")
+            
+            if os.environ.get('STRATEGY_ST_MULTIPLIER'):
+                self.st_multiplier = float(os.environ.get('STRATEGY_ST_MULTIPLIER'))
+                self.logger.info(f"Updated SuperTrend multiplier from config: {self.st_multiplier}")
+            
+            if os.environ.get('STRATEGY_SYMBOL'):
+                self.symbol = os.environ.get('STRATEGY_SYMBOL')
+                self.logger.info(f"Updated trading symbol from config: {self.symbol}")
+            
+            if os.environ.get('STRATEGY_SYMBOL_ID'):
+                self.product_id = os.environ.get('STRATEGY_SYMBOL_ID')
+                self.logger.info(f"Updated product ID from config: {self.product_id}")
+                
+        except Exception as e:
+            self.logger.warning(f"Could not load strategy configuration: {e}")
+            self.logger.info("Using default configuration values")
 
     def execute_trading_logic(self, df: pd.DataFrame):
         """Main trading logic execution"""
@@ -163,10 +293,24 @@ class DeltaExchangeBot:
             self.logger.error("SuperTrend columns not found in dataframe")
             return
         
-        current_trend = current_candle['trend_direction']
-        previous_trend = previous_candle['trend_direction']
-        current_price = current_candle['close']
-        supertrend_value = current_candle['supertrend_value']
+        # Validate SuperTrend data
+        if pd.isna(current_candle['trend_direction']) or pd.isna(current_candle['supertrend_value']):
+            self.logger.error("Invalid SuperTrend data - NaN values detected")
+            return
+        
+        if pd.isna(previous_candle['trend_direction']) or pd.isna(previous_candle['supertrend_value']):
+            self.logger.error("Invalid previous SuperTrend data - NaN values detected")
+            return
+        
+        current_trend = int(current_candle['trend_direction'])
+        previous_trend = int(previous_candle['trend_direction'])
+        current_price = float(current_candle['close'])
+        supertrend_value = float(current_candle['supertrend_value'])
+        
+        # Validate trend direction values
+        if current_trend not in [-1, 1] or previous_trend not in [-1, 1]:
+            self.logger.error(f"Invalid trend direction values: current={current_trend}, previous={previous_trend}")
+            return
         
         self.logger.info(f"Current price: {current_price}, SuperTrend: {supertrend_value}, Direction: {current_trend}")
         
@@ -355,7 +499,7 @@ class DeltaExchangeBot:
         """Check if the server is responding properly"""
         try:
             # Try a simple market data request first (no auth required)
-            url = f"{LIVE_BASE_URL}/v2/history/candles"
+            url = f"{BASE_URL}/v2/history/candles" # Use BASE_URL for health check
             params = {
                 'symbol': 'BTCUSD',
                 'resolution': '5m',
@@ -378,7 +522,6 @@ class DeltaExchangeBot:
         """Log current server configuration and status"""
         self.logger.info(f"🔧 Server Configuration:")
         self.logger.info(f"   Base URL: {BASE_URL}")
-        self.logger.info(f"   Live Base URL: {LIVE_BASE_URL}")
         self.logger.info(f"   Product ID: {self.product_id}")
         self.logger.info(f"   Symbol: {self.symbol}")
         
@@ -391,18 +534,41 @@ class DeltaExchangeBot:
 
 def main():
     """Main function to start the bot"""
-    bot = DeltaExchangeBot()
+    parser = argparse.ArgumentParser(description="Delta Exchange SuperTrend Trading Bot")
+    parser.add_argument("--user-id", help="User ID for logging purposes")
+    parser.add_argument("--strategy-name", default="supertrend", help="Name of the strategy (default: supertrend)")
+    parser.add_argument("--test-mode", action="store_true", help="Run in test mode (skip initial candle wait)")
     
-    # Log server status and health check
-    bot.log_server_status()
+    args = parser.parse_args()
+    
+    # Get user_id from command line or environment
+    user_id = args.user_id or os.environ.get('USER_ID')
+    strategy_name = args.strategy_name or os.environ.get('STRATEGY_NAME', 'supertrend')
+    
+    print(f"Starting SuperTrend strategy for user {user_id}, strategy: {strategy_name}")
     
     try:
-        bot.run()
+        bot = DeltaExchangeBot(user_id=user_id, strategy_name=strategy_name)
+        
+        # Log server status and health check
+        bot.log_server_status()
+        
+        # Start the bot
+        if args.test_mode:
+            # In test mode, run one iteration immediately without waiting
+            bot.logger.info("Running in test mode - executing one iteration immediately")
+            bot.run_iteration()
+            bot.logger.info("Test mode completed successfully")
+        else:
+            # Normal mode - start the bot with candle waiting
+            bot.run()
+        
     except KeyboardInterrupt:
-        bot.logger.info("Bot stopped by user")
+        print("\nBot stopped by user (Ctrl+C)")
+        sys.exit(0)
     except Exception as e:
-        bot.logger.error(f"Unexpected error: {e}")
-        raise
+        print(f"Error starting bot: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

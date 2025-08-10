@@ -112,6 +112,27 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="mb-3">
+                                        <label class="form-label">Crypto Coin</label>
+                                        <select class="form-select" name="symbol" required>
+                                            <option value="BTCUSD">BTCUSD</option>
+                                            <option value="ETHUSD">ETHUSD</option>
+                                        </select>
+                                        <div class="help-text">Select the cryptocurrency pair to trade</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Broker Connection</label>
+                                        <select class="form-select" name="broker_connection_id" required>
+                                            <option value="">Select Broker Connection</option>
+                                        </select>
+                                        <div class="help-text">Select your broker connection (testnet/live)</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
                                         <label class="form-label">Leverage</label>
                                         <input type="number" class="form-control" name="LEVERAGE" min="1" max="100" step="1">
                                         <div class="help-text">Trading leverage (1-100x)</div>
@@ -198,12 +219,48 @@
             }
         }
 
+        // Load broker connections
+        async function loadBrokerConnections() {
+            try {
+                const response = await fetch('/api/broker-connections');
+                const connections = await response.json();
+                const select = document.querySelector('[name="broker_connection_id"]');
+                
+                // Clear existing options
+                select.innerHTML = '<option value="">Select Broker Connection</option>';
+                
+                connections.forEach(connection => {
+                    const option = document.createElement('option');
+                    option.value = connection.id;
+                    option.textContent = `${connection.connection_name} (${connection.broker_id})`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load broker connections:', error);
+            }
+        }
+
         // Populate form with configuration values
         function populateForm(config) {
-            for (const [key, value] of Object.entries(config)) {
-                const element = document.querySelector(`[name="${key}"]`);
-                if (element) {
-                    element.value = value;
+            // Handle symbol selection
+            const symbolSelect = document.querySelector('[name="symbol"]');
+            if (symbolSelect && config.symbol) {
+                symbolSelect.value = config.symbol;
+            }
+            
+            // Handle broker connection selection
+            const brokerSelect = document.querySelector('[name="broker_connection_id"]');
+            if (brokerSelect && config.broker_connection_id) {
+                brokerSelect.value = config.broker_connection_id;
+            }
+            
+            // Handle other configuration fields
+            if (config.config_data) {
+                for (const [key, value] of Object.entries(config.config_data)) {
+                    const element = document.querySelector(`[name="${key}"]`);
+                    if (element) {
+                        element.value = value;
+                    }
                 }
             }
         }
@@ -275,6 +332,7 @@
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
+            loadBrokerConnections();
             loadCurrentConfig();
         });
     </script>

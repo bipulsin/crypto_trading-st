@@ -15,6 +15,12 @@ import hmac
 import time
 import uuid
 
+# Import strategy manager
+try:
+    from strategy_manager import strategy_manager
+except ImportError:
+    strategy_manager = None
+
 app = Flask(__name__, static_folder='static')
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-change-this-in-production')
 
@@ -89,6 +95,8 @@ def init_db():
             user_id TEXT NOT NULL,
             strategy_name TEXT NOT NULL,
             broker_connection_id INTEGER,
+            symbol TEXT NOT NULL DEFAULT 'BTCUSD',
+            symbol_id INTEGER NOT NULL DEFAULT 84,
             is_active BOOLEAN DEFAULT FALSE,
             config_data TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -98,16 +106,31 @@ def init_db():
         )
     ''')
     
+    # Strategy status table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS strategy_status (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL,
             strategy_name TEXT NOT NULL,
             is_running BOOLEAN DEFAULT FALSE,
+            process_id INTEGER,
             start_time TIMESTAMP,
             stop_time TIMESTAMP,
             pnl REAL DEFAULT 0.0,
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
+        )
+    ''')
+    
+    # Strategy logs table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS strategy_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            strategy_name TEXT NOT NULL,
+            log_level TEXT NOT NULL,
+            message TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
@@ -346,14 +369,14 @@ def update_user_settings():
         conn.close()
         return jsonify({'success': False, 'error': str(e)}), 400
 
-@app.route('/api/strategy/supertrend/config', methods=['GET'])
+@app.route('/api/config', methods=['GET'])
 @login_required
-def get_supertrend_config():
+def get_config():
     """Get SuperTrend strategy configuration for the current user"""
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT broker_connection_id, config_data, is_active
+        SELECT broker_connection_id, symbol, symbol_id, config_data, is_active
         FROM strategy_configs 
         WHERE user_id = ? AND strategy_name = 'supertrend'
         ORDER BY updated_at DESC LIMIT 1
@@ -363,126 +386,148 @@ def get_supertrend_config():
     
     if config:
         import json
-        config_data = json.loads(config[1]) if config[1] else {}
+        config_data = json.loads(config[3]) if config[3] else {}
         return jsonify({
             'broker_connection_id': config[0],
+            'symbol': config[1],
+            'symbol_id': config[2],
             'config_data': config_data,
-            'is_active': bool(config[2])
+            'is_active': bool(config[4])
         })
     return jsonify({})
 
-@app.route('/api/strategy/supertrend/config', methods=['POST'])
+@app.route('/api/config', methods=['POST'])
 @login_required
-def save_supertrend_config():
+def save_config():
     """Save SuperTrend strategy configuration"""
     data = request.json
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
     
     try:
+        # Get broker connection to determine if it's testnet or live
+        broker_connection_id = data.get('broker_connection_id')
+        symbol = data.get('symbol', 'BTCUSD')
+        
+        # Determine symbol_id based on symbol and broker connection type
+        symbol_id = get_symbol_id(symbol, broker_connection_id)
+        
         import json
         config_data = json.dumps({
-            'take_profit_multiplier': data.get('take_profit_multiplier', 2.0),
-            'trailing_stop': data.get('trailing_stop', True),
-            'candle_size': data.get('candle_size', '5m')
+            'leverage': data.get('LEVERAGE', 10),
+            'position_size_percent': data.get('POSITION_SIZE_PERCENT', 0.1),
+            'take_profit_multiplier': data.get('TAKE_PROFIT_MULTIPLIER', 2.0),
+            'trailing_stop': data.get('ST_WITH_TRAILING', True),
+            'supertrend_period': data.get('SUPERTREND_PERIOD', 10),
+            'supertrend_multiplier': data.get('SUPERTREND_MULTIPLIER', 3.0)
         })
         
         cursor.execute('''
             INSERT OR REPLACE INTO strategy_configs 
-            (user_id, strategy_name, broker_connection_id, config_data, is_active, updated_at)
-            VALUES (?, 'supertrend', ?, ?, ?, CURRENT_TIMESTAMP)
-        ''', (current_user.id, data.get('broker_connection_id'), config_data, data.get('is_active', False)))
+            (user_id, strategy_name, broker_connection_id, symbol, symbol_id, config_data, is_active, updated_at)
+            VALUES (?, 'supertrend', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (current_user.id, broker_connection_id, symbol, symbol_id, config_data, data.get('is_active', False)))
         
         conn.commit()
         conn.close()
-        return jsonify({'success': True, 'message': 'Strategy configuration saved successfully'})
+        return jsonify({'success': True, 'message': 'Configuration saved successfully'})
     except Exception as e:
         conn.close()
         return jsonify({'success': False, 'error': str(e)}), 400
 
-@app.route('/api/strategy/supertrend/status', methods=['GET'])
-@login_required
-def get_supertrend_status():
-    """Get SuperTrend strategy status"""
+def get_symbol_id(symbol, broker_connection_id):
+    """Get symbol_id based on symbol and broker connection type (testnet/live)"""
+    if not broker_connection_id:
+        return 84  # Default to BTCUSD testnet
+    
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
-    cursor.execute('''
-        SELECT is_running, start_time, stop_time, pnl, last_updated
-        FROM strategy_status 
-        WHERE user_id = ? AND strategy_name = 'supertrend'
-        ORDER BY last_updated DESC LIMIT 1
-    ''', (current_user.id,))
-    status = cursor.fetchone()
+    cursor.execute('SELECT broker_url FROM broker_connections WHERE id = ?', (broker_connection_id,))
+    result = cursor.fetchone()
     conn.close()
     
-    if status:
-        return jsonify({
-            'is_running': bool(status[0]),
-            'start_time': status[1],
-            'stop_time': status[2],
-            'pnl': float(status[3]),
-            'last_updated': status[4]
-        })
+    if not result:
+        return 84  # Default to BTCUSD testnet
+    
+    broker_url = result[0]
+    is_testnet = 'testnet' in broker_url.lower() or 'sandbox' in broker_url.lower()
+    
+    # Symbol ID mapping
+    if symbol == 'BTCUSD':
+        return 84 if is_testnet else 27
+    elif symbol == 'ETHUSD':
+        return 3137 if is_testnet else 3136  # Testnet ETHUSD symbol ID (placeholder)
     else:
-        return jsonify({
-            'is_running': False,
-            'start_time': None,
-            'stop_time': None,
-            'pnl': 0.0,
-            'last_updated': datetime.now().isoformat()
-        })
+        return 84  # Default to BTCUSD testnet
 
-@app.route('/api/strategy/supertrend/toggle', methods=['POST'])
-@login_required
-def toggle_supertrend():
-    """Toggle SuperTrend strategy on/off"""
-    data = request.json
-    is_running = data.get('is_running', False)
-    
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    
-    try:
-        if is_running:
-            # Start strategy
-            cursor.execute('''
-                INSERT OR REPLACE INTO strategy_status 
-                (user_id, strategy_name, is_running, start_time, last_updated)
-                VALUES (?, 'supertrend', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ''', (current_user.id,))
-            
-            # Update config to active
-            cursor.execute('''
-                UPDATE strategy_configs 
-                SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ? AND strategy_name = 'supertrend'
-            ''', (current_user.id,))
-        else:
-            # Stop strategy
-            cursor.execute('''
-                INSERT OR REPLACE INTO strategy_status 
-                (user_id, strategy_name, is_running, stop_time, last_updated)
-                VALUES (?, 'supertrend', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ''', (current_user.id,))
-            
-            # Update config to inactive
-            cursor.execute('''
-                UPDATE strategy_configs 
-                SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ? AND strategy_name = 'supertrend'
-            ''', (current_user.id,))
+if strategy_manager:
+    @app.route('/api/strategy/supertrend/status', methods=['GET'])
+    @login_required
+    def get_supertrend_status():
+        """Get SuperTrend strategy status"""
+        try:
+            status = strategy_manager.get_strategy_status(current_user.id, 'supertrend')
+            return jsonify(status)
+        except Exception as e:
+            return jsonify({
+                'is_running': False,
+                'start_time': None,
+                'stop_time': None,
+                'pnl': 0.0,
+                'last_updated': datetime.now().isoformat(),
+                'error': str(e)
+            })
+
+    @app.route('/api/strategy/supertrend/toggle', methods=['POST'])
+    @login_required
+    def toggle_supertrend():
+        """Toggle SuperTrend strategy on/off"""
+        data = request.json
+        is_running = data.get('is_running', False)
         
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            'success': True,
-            'is_running': is_running,
-            'message': f'Strategy {"started" if is_running else "stopped"} successfully'
-        })
-    except Exception as e:
-        conn.close()
-        return jsonify({'success': False, 'error': str(e)}), 400
+        try:
+            if is_running:
+                # Start strategy
+                success = strategy_manager.start_strategy(current_user.id, 'supertrend')
+                if success:
+                    return jsonify({
+                        'success': True,
+                        'is_running': True,
+                        'message': 'Strategy started successfully'
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Failed to start strategy. Check logs for details.'
+                    }), 400
+            else:
+                # Stop strategy
+                success = strategy_manager.stop_strategy(current_user.id, 'supertrend')
+                if success:
+                    return jsonify({
+                        'success': True,
+                        'is_running': False,
+                        'message': 'Strategy stopped successfully'
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Failed to stop strategy. Check logs for details.'
+                    }), 400
+                    
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+    @app.route('/api/strategy/supertrend/logs', methods=['GET'])
+    @login_required
+    def get_supertrend_logs():
+        """Get SuperTrend strategy logs"""
+        try:
+            # Get the last 100 logs as requested
+            logs = strategy_manager.get_strategy_logs(current_user.id, 'supertrend', limit=100)
+            return jsonify({'logs': logs})
+        except Exception as e:
+            return jsonify({'logs': [], 'error': str(e)})
 
 @app.route('/api/market/prices')
 @login_required
