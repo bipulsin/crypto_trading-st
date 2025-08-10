@@ -644,13 +644,23 @@
                     fetch('/api/strategy/supertrend/config').then(r => r.json())
                 ]);
                 
+                // Handle case when config is null (new user)
+                const configData = config && config.config_data ? config.config_data : {
+                    take_profit_multiplier: 2.0,
+                    trailing_stop: true,
+                    candle_size: '5m',
+                    supertrend_period: 10,
+                    supertrend_multiplier: 3.0
+                };
+                
+                const brokerConnectionId = config && config.broker_connection_id ? config.broker_connection_id : null;
+                
                 const brokerOptions = brokerConnections.map(broker => 
-                    `<option value="${broker.id}" ${config.broker_connection_id == broker.id ? 'selected' : ''}>
+                    `<option value="${broker.id}" ${brokerConnectionId == broker.id ? 'selected' : ''}>
                         ${broker.connection_name} (${broker.broker_id})
                     </option>`
                 ).join('');
                 
-                const configData = config.config_data || {};
                 const startTime = status.start_time ? new Date(status.start_time).toLocaleString() : 'Not started';
                 const lastUpdated = status.last_updated ? new Date(status.last_updated).toLocaleString() : 'Never';
                 
@@ -724,6 +734,16 @@
                                     <option value="15m" ${configData.candle_size === '15m' ? 'selected' : ''}>15 Minutes</option>
                                     <option value="1h" ${configData.candle_size === '1h' ? 'selected' : ''}>1 Hour</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">SuperTrend Period</label>
+                                <input type="number" class="form-control" id="supertrendPeriod" value="${configData.supertrend_period || 10}" min="1" max="50">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">SuperTrend Multiplier</label>
+                                <input type="number" class="form-control" id="supertrendMultiplier" value="${configData.supertrend_multiplier || 3.0}" step="0.1" min="0.1" max="10.0">
                             </div>
                         </div>
                         <div class="d-flex gap-2">
@@ -1046,6 +1066,8 @@
                 take_profit_multiplier: parseFloat(document.getElementById('takeProfitMultiplier').value),
                 trailing_stop: document.getElementById('trailingStop').value === 'true',
                 candle_size: document.getElementById('candleSize').value,
+                supertrend_period: parseInt(document.getElementById('supertrendPeriod').value),
+                supertrend_multiplier: parseFloat(document.getElementById('supertrendMultiplier').value),
                 is_active: false
             };
             
@@ -1074,6 +1096,8 @@
                 take_profit_multiplier: parseFloat(document.getElementById('takeProfitMultiplier').value),
                 trailing_stop: document.getElementById('trailingStop').value === 'true',
                 candle_size: document.getElementById('candleSize').value,
+                supertrend_period: parseInt(document.getElementById('supertrendPeriod').value),
+                supertrend_multiplier: parseFloat(document.getElementById('supertrendMultiplier').value),
                 is_active: true
             };
             
