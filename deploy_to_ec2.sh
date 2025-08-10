@@ -62,10 +62,17 @@ mkdir -p $DEPLOY_DIR
 
 # Copy application files
 cp app.py $DEPLOY_DIR/
-cp start_app.py $DEPLOY_DIR/
 cp requirements.txt $DEPLOY_DIR/
 cp -r templates $DEPLOY_DIR/
 cp -r static $DEPLOY_DIR/
+cp strategy_manager.py $DEPLOY_DIR/
+cp strategy_st.py $DEPLOY_DIR/
+cp supertrend.py $DEPLOY_DIR/
+cp supertrend_config.py $DEPLOY_DIR/
+cp delta_api.py $DEPLOY_DIR/
+cp config.py $DEPLOY_DIR/
+cp logger.py $DEPLOY_DIR/
+cp debug_env.py $DEPLOY_DIR/
 cp logo.jpg $DEPLOY_DIR/static/ 2>/dev/null || print_warning "logo.jpg not found, will need to be added manually"
 
 # Create systemd service file
