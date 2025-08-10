@@ -272,6 +272,9 @@ class StrategyManager:
             self.update_strategy_status(user_id, strategy_name, False)
             self.log_strategy_event(user_id, strategy_name, "INFO", f"Strategy {strategy_name} stopped successfully")
             
+            # Clear all logs for this strategy when stopping to show blank page
+            self.clear_strategy_logs(user_id, strategy_name)
+            
             return True
             
         except Exception as e:
@@ -409,6 +412,27 @@ class StrategyManager:
         except Exception as e:
             self.logger.error(f"Failed to get strategy logs: {e}")
             return []
+    
+    def clear_strategy_logs(self, user_id: str, strategy_name: str) -> bool:
+        """Clear all logs for a specific strategy when stopping"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                DELETE FROM strategy_logs 
+                WHERE user_id = ? AND strategy_name = ?
+            ''', (user_id, strategy_name))
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"Cleared all logs for strategy {strategy_name} for user {user_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to clear strategy logs: {e}")
+            return False
     
     def get_strategy_status(self, user_id: str, strategy_name: str) -> Dict:
         """Get current strategy status"""
