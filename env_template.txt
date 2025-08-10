@@ -1,0 +1,22 @@
+# Trade Manthan Environment Configuration
+# Copy this file to .env and update with your actual credentials
+
+# Strategy Configuration
+STRATEGY_CANDLE_SIZE=15m
+
+# Google OAuth Configuration
+# You need to get these from Google Cloud Console
+GOOGLE_CLIENT_ID=your-google-client-id-here
+GOOGLE_CLIENT_SECRET=your-google-client-secret-here
+GOOGLE_REDIRECT_URI=https://trademanthan.in/callback
+
+# Flask Configuration
+FLASK_ENV=production
+FLASK_SECRET_KEY=your-production-secret-key-change-this-in-production
+
+# Database Configuration (if needed)
+DATABASE_URL=sqlite:///users.db
+
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FILE=logs/trade_manthan.log
