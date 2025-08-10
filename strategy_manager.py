@@ -151,9 +151,19 @@ class StrategyManager:
             self.log_strategy_event(user_id, strategy_name, "INFO", f"Attempting to start {strategy_name} strategy")
             
             # Get the strategy script path
-            script_path = os.path.join(os.path.dirname(__file__), f"{strategy_name}.py")
+            # Map strategy names to actual script files
+            strategy_script_map = {
+                'supertrend': 'strategy_st.py'
+            }
+            
+            script_name = strategy_script_map.get(strategy_name, f"{strategy_name}.py")
+            script_path = os.path.join(os.path.dirname(__file__), script_name)
+            
             if not os.path.exists(script_path):
-                script_path = os.path.join(os.path.dirname(__file__), f"strategy_{strategy_name}.py")
+                # Fallback to the old logic
+                script_path = os.path.join(os.path.dirname(__file__), f"{strategy_name}.py")
+                if not os.path.exists(script_path):
+                    script_path = os.path.join(os.path.dirname(__file__), f"strategy_{strategy_name}.py")
             
             if not os.path.exists(script_path):
                 self.log_strategy_event(user_id, strategy_name, "ERROR", f"Strategy script not found: {script_path}")
