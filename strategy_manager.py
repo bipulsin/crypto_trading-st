@@ -150,6 +150,18 @@ class StrategyManager:
             # Log strategy start attempt
             self.log_strategy_event(user_id, strategy_name, "INFO", f"Attempting to start {strategy_name} strategy")
             
+            # Log configuration parameters
+            config_summary = []
+            for key, value in strategy_config['config_data'].items():
+                config_summary.append(f"{key}: {value}")
+            
+            config_msg = f"Strategy Configuration: {', '.join(config_summary)}"
+            self.log_strategy_event(user_id, strategy_name, "INFO", config_msg)
+            
+            # Log broker connection details
+            broker_msg = f"Broker: {broker_conn['connection_name']} ({broker_conn['broker_id']}) - {broker_conn['broker_url']}"
+            self.log_strategy_event(user_id, strategy_name, "INFO", broker_msg)
+            
             # Get the strategy script path
             # Map strategy names to actual script files
             strategy_script_map = {

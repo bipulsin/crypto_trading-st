@@ -40,8 +40,18 @@ def setup_logger(name, log_file=None, level=logging.INFO):
     
     # Override the default time converter to use IST
     def ist_time_converter(secs):
-        dt = datetime.fromtimestamp(secs, ist_timezone)
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            if isinstance(secs, (int, float)):
+                dt = datetime.fromtimestamp(secs, ist_timezone)
+                return dt.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                # Fallback to current time if secs is not a valid timestamp
+                dt = datetime.now(ist_timezone)
+                return dt.strftime('%Y-%m-%d %H:%M:%S')
+        except (ValueError, OSError, TypeError):
+            # Fallback to current time if conversion fails
+            dt = datetime.now(ist_timezone)
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
     
     detailed_formatter.converter = ist_time_converter
     simple_formatter.converter = ist_time_converter

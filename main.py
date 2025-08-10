@@ -28,6 +28,7 @@ prev_supertrend_signal = None
 pending_order_iterations = 0
 last_order_id = None
 last_position_closure_time = None  # Track when last position was closed
+iteration_counter = 0  # Track iteration numbers for logging
 
 def fetch_candles_optimized():
     try:
@@ -71,9 +72,9 @@ def calculate_supertrend_optimized(candles):
         logger.error(f"Error calculating SuperTrend: {e}")
         return None
 
-def run_strategy_optimized(candles, capital):
+def run_strategy_optimized(candles, capital, iteration_number=None):
     try:
-        return strategy.decide(candles, capital)
+        return strategy.decide(candles, capital, iteration_number)
     except Exception as e:
         logger.error(f"Error in strategy decision: {e}")
         return None
@@ -957,7 +958,7 @@ def continuous_monitoring_cycle():
     except Exception as e:
         logger.error(f"❌ Error in continuous monitoring cycle: {e}")
 
-def execute_trade_optimized(decision):
+def execute_trade_optimized(decision, iteration_number=None):
     """Execute trade with enhanced error handling, retry mechanisms, and performance logging"""
     from config import (MAX_CANCEL_RETRIES, MAX_CLOSE_RETRIES, RETRY_WAIT_TIME, 
                        ORDER_VERIFICATION_TIMEOUT, MAX_ORDER_PLACEMENT_TIME, 
@@ -967,7 +968,8 @@ def execute_trade_optimized(decision):
     if not decision or not decision['action']:
         return False
     
-    logger.info(f"🚀 Trade triggered: {decision['action']} {decision['side']} {decision['qty']} at Price: ${decision['price']:.2f} -- Stop-Loss at {decision['stop_loss']}")
+    iteration_prefix = f"[Iteration {iteration_number}] " if iteration_number else ""
+    logger.info(f"{iteration_prefix}🚀 NEW ORDER PLACED: {decision['action']} {decision['side']} {decision['qty']} at Price: ${decision['price']:.2f} -- Stop-Loss at {decision['stop_loss']:.2f}")
     
     # Performance tracking
     start_time = time.time()
@@ -1266,6 +1268,7 @@ while True:
 
 # Main trading loop
 while True:
+    iteration_counter += 1  # Increment iteration counter
     iteration_start = time.time()
     try:
         now = datetime.datetime.now().replace(second=0, microsecond=0)
@@ -1294,6 +1297,8 @@ while True:
         
         # Full trading logic - executed based on timing configuration
         if should_place_new_order:
+            # Log iteration start with iteration number
+            logger.info(f"🔄 [Iteration {iteration_counter}] Starting trading logic")
             if at_candle_close:
                 logger.info("🕐 Candle close detected - executing full trading logic")
             else:
@@ -1402,7 +1407,7 @@ while True:
                     # Additional check to ensure strategy is ready for new trades
                     strategy.ensure_ready_for_new_trades()
                     
-                    decision = run_strategy_optimized(candles, current_capital)
+                    decision = run_strategy_optimized(candles, current_capital, iteration_counter)
                     if decision and decision['action']:
                         execute_trade_optimized(decision)
                         pending_order_iterations = 0
