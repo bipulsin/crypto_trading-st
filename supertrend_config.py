@@ -30,7 +30,18 @@ class SuperTrendConfig:
         self.symbol = os.getenv('STRATEGY_SYMBOL', 'BTCUSD')
         self.symbol_id = os.getenv('STRATEGY_SYMBOL_ID', '84')  # Default to BTCUSD testnet
         self.leverage = int(os.getenv('LEVERAGE', '1'))
-        self.candle_size = os.getenv('STRATEGY_CANDLE_SIZE', '5m')
+        self.candle_size = os.getenv('STRATEGY_CANDLE_SIZE', '15m')  # Default to 15 minutes
+        
+        # Candle Interval Configuration (in minutes)
+        self.candle_interval = int(os.getenv('STRATEGY_CANDLE_INTERVAL', '15'))  # 5, 15, or 30 minutes
+        
+        # Validate candle interval
+        if self.candle_interval not in [5, 15, 30]:
+            self.candle_interval = 15  # Default to 15 minutes if invalid
+            print(f"Warning: Invalid candle interval {self.candle_interval}. Defaulting to 15 minutes.")
+        
+        # Update candle_size string to match interval
+        self.candle_size = f"{self.candle_interval}m"
         
         # SuperTrend Parameters
         self.st_period = int(os.getenv('STRATEGY_ST_PERIOD', '10'))

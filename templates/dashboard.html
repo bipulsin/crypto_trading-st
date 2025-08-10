@@ -730,8 +730,9 @@
                                 <label class="form-label">Candle Size/Duration</label>
                                 <select class="form-select" id="candleSize">
                                     <option value="1m" ${configData.candle_size === '1m' ? 'selected' : ''}>1 Minute</option>
-                                    <option value="5m" ${configData.candle_size === '5m' || !configData.candle_size ? 'selected' : ''}>5 Minutes</option>
-                                    <option value="15m" ${configData.candle_size === '15m' ? 'selected' : ''}>15 Minutes</option>
+                                    <option value="5m" ${configData.candle_size === '5m' ? 'selected' : ''}>5 Minutes</option>
+                                    <option value="15m" ${configData.candle_size === '15m' || !configData.candle_size ? 'selected' : ''}>15 Minutes</option>
+                                    <option value="30m" ${configData.candle_size === '30m' ? 'selected' : ''}>30 Minutes</option>
                                     <option value="1h" ${configData.candle_size === '1h' ? 'selected' : ''}>1 Hour</option>
                                 </select>
                             </div>
