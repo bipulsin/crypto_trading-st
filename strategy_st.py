@@ -88,6 +88,7 @@ class DeltaExchangeBot:
         # Strategy state
         self.iteration_count = 0
         self.last_trend_change = None
+        self.simulation_mode = False  # Will be set in validate_api_connection
         
         # Setup logging
         self.setup_logging()
@@ -104,6 +105,13 @@ class DeltaExchangeBot:
         self.logger.info(f"Position size: {self.position_size_pct * 100}% of balance, Take profit: {self.take_profit_multiplier}x risk")
         self.logger.info(f"Trailing stop: {'Enabled' if self.st_with_trailing else 'Disabled'}")
         self.logger.info(f"Default capital fallback: ${self.default_capital}")
+        
+        # Log simulation mode status
+        if self.simulation_mode:
+            self.logger.info("🎭 SIMULATION MODE ENABLED - Trading logic will run without real orders")
+            self.logger.info("🎭 This allows testing the strategy logic without valid API credentials")
+        else:
+            self.logger.info("✅ LIVE TRADING MODE - Real orders will be placed")
 
     def setup_logging(self):
         """Setup comprehensive logging"""
@@ -207,6 +215,10 @@ class DeltaExchangeBot:
 
     def get_wallet_balance(self) -> float:
         """Get wallet balance using delta_api"""
+        if self.simulation_mode:
+            self.logger.info("🎭 SIMULATION: Using simulated wallet balance")
+            return self.default_capital
+        
         try:
             balance = self.api.get_wallet_balance()
             if balance is not None:
@@ -220,10 +232,16 @@ class DeltaExchangeBot:
 
     def get_current_position(self) -> Optional[Dict]:
         """Get current position using delta_api"""
+        if self.simulation_mode:
+            # Return None in simulation mode (no real positions)
+            return None
         return self.api.get_current_position(self.product_id)
 
     def get_open_orders(self) -> List[Dict]:
         """Get open orders using delta_api"""
+        if self.simulation_mode:
+            # Return empty list in simulation mode (no real orders)
+            return []
         return self.api.get_open_orders(self.product_id)
 
     def calculate_position_size(self, price: float, balance: float) -> float:
@@ -240,6 +258,26 @@ class DeltaExchangeBot:
 
     def place_market_order(self, side: str, size: float, stop_loss: float = None, take_profit: float = None, current_price: float = None) -> Optional[Dict]:
         """Place market order using delta_api"""
+        if self.simulation_mode:
+            # Simulate order placement
+            from datetime import datetime
+            import time
+            simulated_order = {
+                'id': f"sim_{int(time.time())}",
+                'side': side,
+                'size': size,
+                'state': 'filled',
+                'product_symbol': self.symbol,
+                'created_at': datetime.now().isoformat(),
+                'simulated': True
+            }
+            self.logger.info(f"🎭 SIMULATION: Market order placed: {side} {size} contracts")
+            if stop_loss:
+                self.logger.info(f"🎭 SIMULATION: Stop Loss set at: {stop_loss}")
+            if take_profit:
+                self.logger.info(f"🎭 SIMULATION: Take Profit set at: {take_profit}")
+            return simulated_order
+        
         return self.api.place_market_order_with_trailing(
             side=side,
             size=size,
@@ -252,10 +290,16 @@ class DeltaExchangeBot:
 
     def close_position(self) -> bool:
         """Close current position using delta_api"""
+        if self.simulation_mode:
+            self.logger.info("🎭 SIMULATION: Position closed (simulated)")
+            return True
         return self.api.close_all_positions(self.product_id)
 
     def cancel_order(self, order_id: int) -> bool:
         """Cancel order using delta_api"""
+        if self.simulation_mode:
+            self.logger.info(f"🎭 SIMULATION: Order {order_id} cancelled (simulated)")
+            return True
         return self.api.cancel_order(order_id)
 
     def validate_order_data(self, order_data: Dict) -> bool:
@@ -269,11 +313,14 @@ class DeltaExchangeBot:
             balance = self.api.get_wallet_balance()
             if balance is not None:
                 self.logger.info(f"✅ API connection validated - Balance: {balance}")
+                self.simulation_mode = False
             else:
                 raise ValueError("Failed to get wallet balance")
         except Exception as e:
-            self.logger.error(f"❌ API connection failed: {e}")
-            raise ValueError("API_KEY and API_SECRET must be set correctly in environment variables")
+            self.logger.warning(f"⚠️  API connection failed: {e}")
+            self.logger.info("🔄 Switching to SIMULATION MODE - Trading logic will run without real orders")
+            self.simulation_mode = True
+            # Don't raise error, continue in simulation mode
 
     def load_strategy_config(self):
         """Load strategy configuration from database if available"""
