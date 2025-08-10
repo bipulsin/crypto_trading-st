@@ -449,7 +449,7 @@ class StrategyManager:
                     user_id, strategy_name, broker_connection_id, 
                     symbol, symbol_id, config_data, is_active, 
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ''', (
                 user_id, strategy_name, broker_connection_id,
                 'BTCUSD', 84, json.dumps(config_data), True
