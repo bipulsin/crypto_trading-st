@@ -529,6 +529,55 @@ if strategy_manager:
         except Exception as e:
             return jsonify({'logs': [], 'error': str(e)})
 
+    @app.route('/api/strategy/supertrend/config', methods=['GET'])
+    @login_required
+    def get_supertrend_config():
+        """Get SuperTrend strategy configuration"""
+        try:
+            config = strategy_manager.get_strategy_config(current_user.id, 'supertrend')
+            return jsonify(config)
+        except Exception as e:
+            # Return default configuration if none exists
+            return jsonify({
+                'broker_connection_id': None,
+                'config_data': {
+                    'take_profit_multiplier': 2.0,
+                    'trailing_stop': True,
+                    'candle_size': '5m',
+                    'supertrend_period': 10,
+                    'supertrend_multiplier': 3.0
+                }
+            })
+
+    @app.route('/api/strategy/supertrend/config', methods=['POST'])
+    @login_required
+    def save_supertrend_config():
+        """Save SuperTrend strategy configuration"""
+        try:
+            data = request.json
+            config_data = {
+                'take_profit_multiplier': float(data.get('take_profit_multiplier', 2.0)),
+                'trailing_stop': data.get('trailing_stop', True),
+                'candle_size': data.get('candle_size', '5m'),
+                'supertrend_period': int(data.get('supertrend_period', 10)),
+                'supertrend_multiplier': float(data.get('supertrend_multiplier', 3.0))
+            }
+            
+            success = strategy_manager.save_strategy_config(
+                current_user.id, 
+                'supertrend', 
+                data.get('broker_connection_id'),
+                config_data
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': 'Configuration saved successfully'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to save configuration'}), 400
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
 @app.route('/api/market/prices')
 @login_required
 def get_market_prices():

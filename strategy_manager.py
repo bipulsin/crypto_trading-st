@@ -415,7 +415,8 @@ class StrategyManager:
                     'stop_time': None,
                     'pnl': 0.0,
                     'last_updated': datetime.now().isoformat(),
-                    'process_id': None
+                    'process_id': None,
+                    'error': str(e)
                 }
         except Exception as e:
             self.logger.error(f"Failed to get strategy status: {e}")
@@ -428,6 +429,41 @@ class StrategyManager:
                 'process_id': None,
                 'error': str(e)
             }
+
+    def save_strategy_config(self, user_id: str, strategy_name: str, broker_connection_id: Optional[int], config_data: Dict) -> bool:
+        """Save strategy configuration to database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # First, deactivate any existing active configs for this user and strategy
+            cursor.execute('''
+                UPDATE strategy_configs 
+                SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ? AND strategy_name = ?
+            ''', (user_id, strategy_name))
+            
+            # Insert new configuration
+            cursor.execute('''
+                INSERT INTO strategy_configs (
+                    user_id, strategy_name, broker_connection_id, 
+                    symbol, symbol_id, config_data, is_active, 
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ''', (
+                user_id, strategy_name, broker_connection_id,
+                'BTCUSD', 84, json.dumps(config_data), True
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            self.log_strategy_event(user_id, strategy_name, "INFO", f"Configuration saved for {strategy_name} strategy")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save strategy config: {e}")
+            return False
 
 # Global strategy manager instance
 strategy_manager = StrategyManager()
