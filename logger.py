@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 def setup_logger(name, log_file=None, level=logging.INFO):
     """
@@ -25,13 +25,26 @@ def setup_logger(name, log_file=None, level=logging.INFO):
     # Clear existing handlers to avoid duplicates
     logger.handlers.clear()
     
-    # Create formatters
+    # Create formatters with IST timezone
     detailed_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        '%(asctime)s IST - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
     simple_formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
+        '%(asctime)s IST - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
+    
+    # Set timezone to IST (GMT+5:30)
+    ist_timezone = timezone(timedelta(hours=5, minutes=30))
+    
+    # Override the default time converter to use IST
+    def ist_time_converter(secs):
+        dt = datetime.fromtimestamp(secs, ist_timezone)
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    
+    detailed_formatter.converter = ist_time_converter
+    simple_formatter.converter = ist_time_converter
     
     # Console handler
     console_handler = logging.StreamHandler()

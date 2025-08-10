@@ -50,7 +50,23 @@ def fetch_candles_optimized():
 
 def calculate_supertrend_optimized(candles):
     try:
-        return calculate_supertrend(candles, period=SUPERTREND_PERIOD, multiplier=SUPERTREND_MULTIPLIER)
+        # Ensure we have the required columns
+        required_columns = ['open', 'high', 'low', 'close', 'volume']
+        if not all(col in candles.columns for col in required_columns):
+            logger.error(f"Missing required columns. Available: {list(candles.columns)}")
+            return None
+            
+        # Calculate SuperTrend
+        result = calculate_supertrend(candles, period=SUPERTREND_PERIOD, multiplier=SUPERTREND_MULTIPLIER)
+        
+        # Ensure the result has the supertrend column
+        if result is not None and 'supertrend' in result.columns:
+            logger.info(f"SuperTrend calculated successfully. Latest value: {result['supertrend'].iloc[-1]}")
+            return result
+        else:
+            logger.error("SuperTrend calculation failed - missing supertrend column")
+            return None
+            
     except Exception as e:
         logger.error(f"Error calculating SuperTrend: {e}")
         return None

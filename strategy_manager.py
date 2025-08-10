@@ -356,10 +356,27 @@ class StrategyManager:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
+            # Ensure strategy_logs table exists
             cursor.execute('''
-                INSERT INTO strategy_logs (user_id, strategy_name, log_level, message)
-                VALUES (?, ?, ?, ?)
-            ''', (user_id, strategy_name, level, message))
+                CREATE TABLE IF NOT EXISTS strategy_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    strategy_name TEXT NOT NULL,
+                    log_level TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Insert log with IST timestamp
+            from datetime import datetime, timezone, timedelta
+            ist_timezone = timezone(timedelta(hours=5, minutes=30))
+            ist_timestamp = datetime.now(ist_timezone).isoformat()
+            
+            cursor.execute('''
+                INSERT INTO strategy_logs (user_id, strategy_name, log_level, message, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, strategy_name, level, message, ist_timestamp))
             
             conn.commit()
             conn.close()

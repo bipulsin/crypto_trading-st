@@ -591,4 +591,7 @@ def get_market_prices():
 
 if __name__ == '__main__':
     init_db()
+    # Initialize strategy manager database
+    if strategy_manager:
+        strategy_manager.init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)
