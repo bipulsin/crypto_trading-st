@@ -30,6 +30,13 @@ STRATEGY_TAKE_PROFIT_MULTIPLIER = float(os.getenv('STRATEGY_TAKE_PROFIT_MULTIPLI
 STRATEGY_TRAILING_STOP = os.getenv('STRATEGY_TRAILING_STOP', 'false').lower() == 'true'
 STRATEGY_CANDLE_SIZE = os.getenv('STRATEGY_CANDLE_SIZE', '5m')
 
+# SuperTrend configuration
+ST_PERIOD = int(os.getenv('ST_PERIOD', '10'))
+ST_MULTIPLIER = float(os.getenv('ST_MULTIPLIER', '3.0'))
+TAKE_PROFIT_MULTIPLIER = float(os.getenv('TAKE_PROFIT_MULTIPLIER', '1.5'))
+POSITION_SIZE_PCT = float(os.getenv('POSITION_SIZE_PCT', '0.5'))
+ASSET_ID = os.getenv('ASSET_ID', '3')
+
 # Debug: Print environment variables
 print(f"=== ENVIRONMENT VARIABLES ===")
 print(f"BASE_URL: {BASE_URL}")
@@ -49,6 +56,10 @@ except ImportError as e:
 
 class DeltaExchangeBot:
     def __init__(self, user_id=None, strategy_name=None):
+        # Store user_id and strategy_name
+        self.user_id = user_id or os.environ.get('USER_ID')
+        self.strategy_name = strategy_name or os.environ.get('STRATEGY_NAME', 'supertrend')
+        
         # Initialize Delta API
         self.api = DeltaAPI()
         
@@ -61,6 +72,7 @@ class DeltaExchangeBot:
         self.symbol = SYMBOL
         self.product_id = SYMBOL_ID
         self.asset_id = ASSET_ID
+        self.resolution = STRATEGY_CANDLE_SIZE
         
         # Trailing Stop Loss Configuration
         self.st_with_trailing = STRATEGY_TRAILING_STOP # Use strategy-specific trailing stop
