@@ -52,46 +52,46 @@ class DeltaExchangeBot:
         # Initialize Delta API
         self.api = DeltaAPI()
         
-        # Store user_id and strategy_name
-        self.user_id = user_id or os.environ.get('USER_ID')
-        self.strategy_name = strategy_name or os.environ.get('STRATEGY_NAME', 'supertrend')
-        
-        # Trading Configuration
+        # Strategy configuration
+        self.st_period = ST_PERIOD
+        self.st_multiplier = ST_MULTIPLIER
+        self.take_profit_multiplier = TAKE_PROFIT_MULTIPLIER
+        self.position_size_pct = POSITION_SIZE_PCT
+        self.leverage = LEVERAGE
         self.symbol = SYMBOL
         self.product_id = SYMBOL_ID
-        self.resolution = STRATEGY_CANDLE_SIZE # Use strategy-specific candle size
-        
-        # SuperTrend Parameters - try to get from environment, fallback to defaults
-        self.st_period = int(os.environ.get('ST_PERIOD', '10'))
-        self.st_multiplier = float(os.environ.get('ST_MULTIPLIER', '3.0'))
-        
-        # Risk Management
-        self.position_size_pct = 0.5  # 50% of available balance
-        self.take_profit_multiplier = STRATEGY_TAKE_PROFIT_MULTIPLIER # Use strategy-specific take profit multiplier
-        self.leverage = LEVERAGE  # Use leverage from config
-        
-        # State Management
-        self.last_supertrend_direction = None
-        self.order_timeout_counter = {}
-        self.iteration_count = 0
+        self.asset_id = ASSET_ID
         
         # Trailing Stop Loss Configuration
         self.st_with_trailing = STRATEGY_TRAILING_STOP # Use strategy-specific trailing stop
         self.trailing_stop_distance = 100  # 100 points trailing distance (fallback)
         
+        # Default capital for fallback when API fails
+        self.default_capital = float(os.environ.get('DEFAULT_CAPITAL', '1000.0'))
+        
+        # Order management
+        self.order_timeout_counter = {}
+        self.max_order_timeout = 3  # Maximum iterations before cancelling order
+        
+        # Strategy state
+        self.iteration_count = 0
+        self.last_trend_change = None
+        
         # Setup logging
         self.setup_logging()
         
-        # Don't validate API connection during initialization to avoid blocking startup
-        # API connection will be validated when needed during trading operations
+        # Validate API connection
+        self.validate_api_connection()
         
-        self.logger.info(f"Delta Exchange SuperTrend Bot initialized for user {self.user_id}")
-        self.logger.info(f"Trading Symbol: {self.symbol}")
-        self.logger.info(f"SuperTrend Parameters: Period={self.st_period}, Multiplier={self.st_multiplier}")
-        self.logger.info(f"Trailing Stop Configuration: {'Enabled' if self.st_with_trailing else 'Disabled'}")
-        
-        # Try to load strategy configuration from database if available
+        # Load strategy configuration
         self.load_strategy_config()
+        
+        # Log initial configuration
+        self.logger.info(f"SuperTrend Strategy initialized with period={self.st_period}, multiplier={self.st_multiplier}")
+        self.logger.info(f"Trading {self.symbol} (ID: {self.product_id}) with {self.leverage}x leverage")
+        self.logger.info(f"Position size: {self.position_size_pct * 100}% of balance, Take profit: {self.take_profit_multiplier}x risk")
+        self.logger.info(f"Trailing stop: {'Enabled' if self.st_with_trailing else 'Disabled'}")
+        self.logger.info(f"Default capital fallback: ${self.default_capital}")
 
     def setup_logging(self):
         """Setup comprehensive logging"""
@@ -195,7 +195,16 @@ class DeltaExchangeBot:
 
     def get_wallet_balance(self) -> float:
         """Get wallet balance using delta_api"""
-        return self.api.get_wallet_balance()
+        try:
+            balance = self.api.get_wallet_balance()
+            if balance is not None:
+                return balance
+            else:
+                self.logger.warning(f"API returned None for balance. Falling back to default capital: {self.default_capital}")
+                return self.default_capital
+        except Exception as e:
+            self.logger.error(f"Error getting wallet balance from API: {e}. Falling back to default capital: {self.default_capital}")
+            return self.default_capital
 
     def get_current_position(self) -> Optional[Dict]:
         """Get current position using delta_api"""
@@ -356,6 +365,10 @@ class DeltaExchangeBot:
                     
                     # Place new order in opposite direction
                     balance = self.get_wallet_balance()
+                    if balance is None or balance <= 0:
+                        self.logger.warning(f"Wallet balance is None or <= 0, using default capital: {self.default_capital}")
+                        balance = self.default_capital
+                    
                     if balance > 0:
                         size = self.calculate_position_size(current_price, balance)
                         side = 'buy' if current_trend == 1 else 'sell'
@@ -383,6 +396,10 @@ class DeltaExchangeBot:
             if not open_orders:
                 # Case 3a: No position and no orders - Place new order based on SuperTrend direction
                 balance = self.get_wallet_balance()
+                if balance is None or balance <= 0:
+                    self.logger.warning(f"Wallet balance is None or <= 0, using default capital: {self.default_capital}")
+                    balance = self.default_capital
+                
                 if balance > 0:
                     size = self.calculate_position_size(current_price, balance)
                     side = 'buy' if current_trend == 1 else 'sell'

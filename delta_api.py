@@ -665,20 +665,24 @@ class DeltaAPI:
             
             if not response.get('success', False):
                 logger.error(f"Failed to fetch wallet balance: {response}")
-                return 0.0
+                return None
             
             balances = response.get('result', [])
             for balance in balances:
                 if balance.get('asset_symbol') == 'USD':
                     available = float(balance.get('available_balance', 0))
-                    logger.info(f"Available USD balance: {available}")
-                    return available
+                    if available > 0:
+                        logger.info(f"Available USD balance: {available}")
+                        return available
+                    else:
+                        logger.warning(f"USD balance is 0 or negative: {available}")
+                        return available
             
-            logger.warning("USD balance not found")
-            return 0.0
+            logger.warning("USD balance not found in response")
+            return None
         except Exception as e:
             logger.error(f"Error getting wallet balance: {e}")
-            return 0.0
+            return None
 
     def get_current_position(self, product_id=None):
         """Get current position for specified product"""
@@ -847,10 +851,27 @@ class DeltaAPI:
                     logger.error(f"Failed to place simple market order: {simple_response}")
                     return None
             else:
-                logger.error(f"Failed to place order: {response}")
-                # Log the order data that failed
-                logger.error(f"Failed order data: {order_data}")
-                return None
+                # Try to place a simple market order as fallback for any other error
+                logger.warning("Bracket order failed. Trying simple market order as fallback...")
+                
+                simple_order_data = {
+                    'product_id': product_id,
+                    'size': int(size),
+                    'side': side,
+                    'order_type': 'market_order'
+                }
+                
+                simple_response = self.make_request('POST', '/v2/orders', data=simple_order_data)
+                
+                if simple_response.get('success', False):
+                    order = simple_response.get('result')
+                    logger.info(f"Simple market order placed successfully as fallback: {side} {int(size)} contracts")
+                    logger.warning("Bracket orders failed, but simple order succeeded")
+                    return order
+                else:
+                    logger.error(f"Failed to place simple market order as fallback: {simple_response}")
+                    logger.error(f"Failed order data: {order_data}")
+                    return None
 
     def validate_order_data(self, order_data):
         """Validate order data before sending"""
