@@ -26,6 +26,22 @@ logger = get_logger('delta_api', 'logs/delta_api.log')
 
 class DeltaAPI:
     def __init__(self):
+        # Reload environment variables to ensure latest values
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # Get configuration from environment variables
+        self.api_key = os.getenv('API_KEY', '')
+        self.api_secret = os.getenv('API_SECRET', '')
+        self.base_url = os.getenv('BASE_URL', 'https://api.delta.exchange')
+        self.symbol_id = os.getenv('SYMBOL_ID', '1')
+        self.symbol = os.getenv('SYMBOL', 'BTCUSDT')
+        self.asset_id = os.getenv('ASSET_ID', '3')
+        
+        # Validate API credentials
+        if not self.api_key or not self.api_secret:
+            raise ValueError("API_KEY and API_SECRET must be set in environment variables")
+        
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'TradingBot/1.0',
@@ -39,7 +55,9 @@ class DeltaAPI:
         self._price_cache_duration = 5
         self._cache_lock = threading.Lock()
 
-    def get_latest_price(self, symbol=SYMBOL):
+    def get_latest_price(self, symbol=None):
+        if symbol is None:
+            symbol = self.symbol
         """Get latest price using LIVE parameters (market data)"""
         current_time = time.time()
         with self._cache_lock:
@@ -59,7 +77,9 @@ class DeltaAPI:
                     return None
         return self._price_cache
 
-    def get_candles(self, symbol=SYMBOL, interval='5m', limit=100, start=None, end=None):
+    def get_candles(self, symbol=None, interval='5m', limit=100, start=None, end=None):
+        if symbol is None:
+            symbol = self.symbol
         """Get candle data using LIVE parameters (market data)"""
         url = f"{LIVE_BASE_URL}/v2/history/candles"
         params = {
@@ -139,9 +159,9 @@ class DeltaAPI:
         else:
             body = json.dumps(body)
         message = method + timestamp + path + body
-        signature = hmac.new(API_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(self.api_secret.encode(), message.encode(), hashlib.sha256).hexdigest()
         headers = {
-            "api-key": API_KEY,
+            "api-key": self.api_key,
             "timestamp": timestamp,
             "signature": signature,
             "Content-Type": "application/json"
@@ -176,11 +196,11 @@ class DeltaAPI:
                 take_profit = round(float(take_profit), 2)
             else:
                 take_profit = price + 100
-        url = f"{BASE_URL}/v2/orders"
+        url = f"{self.base_url}/v2/orders"
         path = "/v2/orders"
         qty = int(qty)
         data = {
-            'product_id': SYMBOL_ID,
+            'product_id': self.symbol_id,
             'side': side,
             'order_type': 'limit_order',
             'size': qty,
@@ -412,7 +432,9 @@ class DeltaAPI:
                 "result": None
             }
 
-    def get_positions(self, product_id=84):
+    def get_positions(self, product_id=None):
+        if product_id is None:
+            product_id = self.symbol_id
         """Get positions using ORIGINAL parameters (trading operations)"""
         path = f"/v2/positions?product_id={product_id}"
         headers, timestamp, message, signature = self.sign_request("GET", path)
@@ -424,7 +446,9 @@ class DeltaAPI:
         else:
             raise Exception("Failed to get positions")
 
-    def close_all_positions(self, product_id=84):
+    def close_all_positions(self, product_id=None):
+        if product_id is None:
+            product_id = self.symbol_id
         """Close all positions using ORIGINAL parameters (trading operations)"""
         try:
             positions = self.get_positions(product_id)
@@ -464,7 +488,9 @@ class DeltaAPI:
         except Exception as e:
             return False
 
-    def get_account_state(self, product_id=84):
+    def get_account_state(self, product_id=None):
+        if product_id is None:
+            product_id = self.symbol_id
         """Get account state using ORIGINAL parameters (trading operations)"""
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -560,6 +586,8 @@ class DeltaAPI:
             return None
 
     def download_fills_history_csv(self, start_time=None, end_time=None, product_id=None):
+        if product_id is None:
+            product_id = self.symbol_id
         """
         Download fills history as CSV from Delta exchange
         
@@ -617,7 +645,9 @@ class DeltaAPI:
             logger.error(f"Error downloading fills history CSV: {e}")
             return None
 
-    def get_ohlc_data(self, symbol=SYMBOL, resolution='5m', limit=100):
+    def get_ohlc_data(self, symbol=None, resolution='5m', limit=100):
+        if symbol is None:
+            symbol = self.symbol
         """Fetch OHLC data from Delta Exchange (no authentication required)"""
         import time
         
@@ -689,7 +719,7 @@ class DeltaAPI:
         import time
         
         if product_id is None:
-            product_id = SYMBOL_ID
+            product_id = self.symbol_id
             
         # Add small delay to prevent rate limiting
         time.sleep(0.1)
@@ -698,7 +728,7 @@ class DeltaAPI:
         headers, _, _, _ = self.sign_request("GET", path)
         
         try:
-            url = f"{BASE_URL}{path}"
+            url = f"{self.base_url}{path}"
             logger.info(f"Fetching position from: {url}")
             response = self.session.get(url, headers=headers, timeout=10)
             
@@ -735,13 +765,13 @@ class DeltaAPI:
     def get_open_orders(self, product_id=None):
         """Get open orders for specified product"""
         if product_id is None:
-            product_id = SYMBOL_ID
+            product_id = self.symbol_id
             
         path = f"/v2/orders?product_id={product_id}"
         headers, _, _, _ = self.sign_request("GET", path)
         
         try:
-            url = f"{BASE_URL}{path}"
+            url = f"{self.base_url}{path}"
             response = self.session.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             data = response.json()
@@ -763,7 +793,7 @@ class DeltaAPI:
     def place_market_order_with_trailing(self, side, size, stop_loss=None, take_profit=None, current_price=None, product_id=None, st_with_trailing=True):
         """Place market order with optional trailing stop loss"""
         if product_id is None:
-            product_id = SYMBOL_ID
+            product_id = self.symbol_id
             
         order_data = {
             'product_id': product_id,
@@ -918,7 +948,7 @@ class DeltaAPI:
                 
                 # sign_request returns (headers, timestamp, message, signature)
                 headers, _, _, _ = self.sign_request(method, path, data)
-                url = f"{BASE_URL}{path}"
+                url = f"{self.base_url}{path}"
                 
                 if method.upper() == 'GET':
                     response = self.session.get(url, headers=headers, timeout=10)
@@ -956,8 +986,7 @@ class DeltaAPI:
             pd.DataFrame: Processed trades dataframe
         """
         if product_id is None:
-            from config import SYMBOL_ID
-            product_id = SYMBOL_ID
+            product_id = self.symbol_id
         
         try:
             # Try different time ranges to get fills data
