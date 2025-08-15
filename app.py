@@ -2,6 +2,8 @@
 
 import os
 import json
+from dotenv import load_dotenv
+load_dotenv()
 import sqlite3
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
@@ -331,6 +333,135 @@ def create_broker_connection():
         conn.close()
         return jsonify({'success': False, 'error': str(e)}), 400
 
+@app.route('/api/broker-connections/<int:connection_id>', methods=['DELETE'])
+@login_required
+def delete_broker_connection(connection_id):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    try:
+        # Check if the connection belongs to the current user
+        cursor.execute('SELECT user_id FROM broker_connections WHERE id = ?', (connection_id,))
+        connection = cursor.fetchone()
+        
+        if not connection:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Broker connection not found'}), 404
+        
+        if connection[0] != current_user.id:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Unauthorized to delete this connection'}), 403
+        
+        # Check if the connection is being used by any strategy
+        cursor.execute('SELECT COUNT(*) FROM strategy_configs WHERE broker_connection_id = ?', (connection_id,))
+        usage_count = cursor.fetchone()[0]
+        
+        if usage_count > 0:
+            conn.close()
+            return jsonify({'success': False, 'error': f'Cannot delete: Connection is used by {usage_count} strategy configuration(s)'}), 400
+        
+        # Delete the broker connection
+        cursor.execute('DELETE FROM broker_connections WHERE id = ?', (connection_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': 'Broker connection deleted successfully'})
+    except Exception as e:
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/broker-connections/<int:connection_id>/wallet-balance', methods=['GET'])
+@login_required
+def get_broker_wallet_balance(connection_id):
+    """Get wallet balance for a specific broker connection"""
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    try:
+        # Check if the connection belongs to the current user
+        cursor.execute('SELECT user_id, broker_url, api_key, api_secret FROM broker_connections WHERE id = ?', (connection_id,))
+        connection = cursor.fetchone()
+        
+        if not connection:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Broker connection not found'}), 404
+        
+        if connection[0] != current_user.id:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Unauthorized to access this connection'}), 403
+        
+        broker_url = connection[1]
+        api_key = connection[2]
+        api_secret = connection[3]
+        
+        # Import required modules for direct API calls
+        import requests
+        import time
+        import hashlib
+        import hmac
+        import json
+        
+        try:
+            # Create direct API request to fetch wallet balance
+            timestamp = str(int(time.time()))
+            path = "/v2/wallet/balances"
+            message = "GET" + timestamp + path
+            signature = hmac.new(api_secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+            
+            headers = {
+                "api-key": api_key,
+                "timestamp": timestamp,
+                "signature": signature,
+                "Content-Type": "application/json"
+            }
+            
+            # Make the API request
+            url = f"{broker_url}{path}"
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get('success', False):
+                balances = data.get('result', [])
+                for balance in balances:
+                    if balance.get('asset_symbol') == 'USD':
+                        available = float(balance.get('available_balance', 0))
+                        conn.close()
+                        return jsonify({
+                            'success': True, 
+                            'balance': available,
+                            'currency': 'USD'
+                        })
+                
+                # If USD balance not found, return 0
+                conn.close()
+                return jsonify({
+                    'success': True, 
+                    'balance': 0,
+                    'currency': 'USD'
+                })
+            else:
+                conn.close()
+                return jsonify({
+                    'success': False, 
+                    'error': 'Failed to fetch wallet balance',
+                    'balance': 0,
+                    'currency': 'USD'
+                })
+            
+        except Exception as api_error:
+            conn.close()
+            return jsonify({
+                'success': False, 
+                'error': f'API Error: {str(api_error)}',
+                'balance': 0,
+                'currency': 'USD'
+            })
+            
+    except Exception as e:
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
 @app.route('/api/user/settings', methods=['GET'])
 @login_required
 def get_user_settings():
@@ -591,7 +722,4 @@ def get_market_prices():
 
 if __name__ == '__main__':
     init_db()
-    # Initialize strategy manager database
-    if strategy_manager:
-        strategy_manager.init_db()
     app.run(debug=True, host='0.0.0.0', port=5000)

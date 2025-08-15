@@ -118,3 +118,4 @@ test_*.log
 # Deployment files
 deploy_key.pem
 *.tar.gz
+node_modules

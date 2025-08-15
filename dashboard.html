@@ -1,0 +1,2699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade Manthan - Dashboard</title>
+    <link rel="icon" type="image/jpeg" href="/static/logo.jpg">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Title Section (15-20% of page) */
+        .title-section {
+            height: 18vh;
+            background: linear-gradient(135deg, #ffffff 0%, #0000ff 100%);
+            color: #333;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .title-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .logo {
+            width: 100px;
+            height: 100px;
+            border-radius: 20px;
+            object-fit: cover;
+        }
+        
+        .title-text h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        
+        .title-text p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+        
+        .title-right {
+            text-align: right;
+        }
+        
+        .welcome-text {
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .datetime {
+            font-size: 0.9rem;
+            color: white;
+            font-weight: 500;
+        }
+        
+        /* Mobile Title Section */
+        @media (max-width: 768px) {
+            .title-section {
+                height: auto;
+                min-height: 20vh;
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 1rem 1rem 1rem 1rem;
+                gap: 1rem;
+                position: relative;
+            }
+            
+            .title-left {
+                width: 100%;
+                justify-content: flex-start;
+                align-items: flex-start;
+                padding-left: 0.5rem;
+                position: relative;
+            }
+            
+            .title-right {
+                width: 100%;
+                text-align: left;
+                border-top: 1px solid rgba(0,0,0,0.2);
+                padding-top: 1rem;
+                padding-left: 0.5rem;
+            }
+            
+            .logo {
+                width: 80px;
+                height: 80px;
+                order: 1;
+                border-radius: 16px;
+                margin-right: 1rem;
+            }
+            
+            .title-text {
+                order: 2;
+                flex: 1;
+                padding-right: 1rem;
+            }
+            
+            .title-text h1 {
+                font-size: 1.5rem;
+                margin-bottom: 0.25rem;
+                color: #1a1a1a;
+            }
+            
+            .title-text p {
+                font-size: 0.9rem;
+                margin-bottom: 0;
+                color: #333;
+            }
+            
+            .welcome-text {
+                font-size: 1rem;
+                margin-bottom: 0.5rem;
+                color: #1a1a1a;
+                font-weight: 600;
+            }
+            
+            .datetime {
+                font-size: 0.85rem;
+                color: #333;
+                font-weight: 500;
+            }
+        }
+        
+        /* Main Content Area */
+        .main-content {
+            height: 75vh;
+            display: flex;
+        }
+        
+        /* Footer Styles */
+        .footer {
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            padding: 1rem 2rem;
+            text-align: right;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+        }
+        
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .footer-text {
+            color: #6c757d;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        /* Mobile Footer */
+        @media (max-width: 768px) {
+            .footer {
+                padding: 0.75rem 1rem;
+                text-align: center;
+            }
+            
+            .footer-text {
+                font-size: 0.85rem;
+            }
+            
+            .main-content {
+                height: 70vh;
+            }
+        }
+        
+        /* Left Sidebar (30% on desktop, hamburger on mobile) */
+        .sidebar {
+            width: 15%;
+            background: white;
+            border-right: 1px solid #e9ecef;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar-menu {
+            padding: 1rem 0;
+        }
+        
+        .menu-item {
+            padding: 0.75rem 1.5rem;
+            color: #495057;
+            text-decoration: none;
+            display: block;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+        }
+        
+        .menu-item:hover {
+            background-color: #f8f9fa;
+            color: #667eea;
+            border-left-color: #667eea;
+            text-decoration: none;
+        }
+        
+        .menu-item.active {
+            background-color: #e3f2fd;
+            color: #667eea;
+            border-left-color: #667eea;
+            font-weight: 600;
+        }
+        
+        .menu-item i {
+            width: 20px;
+            margin-right: 10px;
+        }
+        
+        /* Strategy Management Styles */
+        .strategy-form {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .strategy-form .card-header {
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .strategy-form .form-check {
+            margin-bottom: 0.5rem;
+        }
+        
+        .strategy-form h6 {
+            color: #495057;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .btn-group .btn {
+            margin-right: 0.25rem;
+        }
+        
+        .btn-group .btn:last-child {
+            margin-right: 0;
+        }
+        
+        .deploy-btn {
+            min-width: 80px;
+            width: 80px;
+        }
+        
+        .status-icon {
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .status-icon i {
+            transition: all 0.2s ease;
+        }
+        
+        .status-icon i:hover {
+            transform: scale(1.1);
+        }
+        
+        .strategy-name-link {
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        
+        .strategy-name-link:hover {
+            color: #0056b3;
+            text-decoration: underline;
+        }
+        
+        .strategy-name-link:active {
+            color: #004085;
+        }
+        
+        /* Strategy Cards Mobile Styles */
+        .strategy-card {
+            background: #ffffff;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .strategy-card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .strategy-card-header {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 1rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .strategy-name-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .strategy-name {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #495057;
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .strategy-name a {
+            color: inherit;
+            text-decoration: none;
+        }
+        
+        .strategy-name a:hover {
+            color: #007bff;
+        }
+        
+        .strategy-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .strategy-card-body {
+            padding: 1rem;
+        }
+        
+        .strategy-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+        
+        .strategy-info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .strategy-info-label {
+            font-weight: 600;
+            color: #6c757d;
+            min-width: 80px;
+            font-size: 0.9rem;
+        }
+        
+        .strategy-info-value {
+            color: #495057;
+            text-align: right;
+            flex: 1;
+            font-size: 0.9rem;
+            word-break: break-word;
+        }
+        
+        .strategy-card-actions {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .strategy-actions-row {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+        }
+        
+        .strategy-actions-row .btn {
+            flex: 1;
+            min-width: 80px;
+            max-width: 120px;
+        }
+        
+        .strategy-actions-row .deploy-btn {
+            min-width: 80px;
+            width: 80px;
+        }
+        
+        /* Mobile specific adjustments */
+        @media (max-width: 576px) {
+            .strategy-card {
+                margin: 0 -0.5rem;
+                border-radius: 8px;
+            }
+            
+            .strategy-name-section {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .strategy-status {
+                align-self: flex-end;
+            }
+            
+            .strategy-info-row {
+                flex-direction: column;
+            }
+            
+            .strategy-info-label {
+                min-width: auto;
+            }
+            
+            .strategy-info-value {
+                text-align: left;
+            }
+            
+            .strategy-actions-row {
+                justify-content: center;
+            }
+            
+            .strategy-actions-row .btn {
+                flex: none;
+                min-width: 70px;
+            }
+        }
+        
+        /* Global Rounded Button Styles */
+        .btn:not(.btn-circle):not(.rounded-circle) {
+            border-radius: 25px !important;
+        }
+        
+        /* Strategy Management Icon Buttons */
+        .strategy-icon-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .strategy-icon-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .strategy-icon-btn.btn-info {
+            background: linear-gradient(135deg, #17a2b8, #138496);
+            color: white;
+        }
+        
+        .strategy-icon-btn.btn-danger {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            color: white;
+        }
+        
+        /* Enhanced Status Icons */
+        .status-icon {
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .status-icon.live {
+            color: #28a745;
+        }
+        
+        .status-icon.stopped {
+            color: #6c757d;
+        }
+        
+        .status-icon.live i {
+            animation: pulse-green 2s infinite;
+        }
+        
+        .status-icon.stopped i {
+            opacity: 0.7;
+        }
+        
+        @keyframes pulse-green {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .submenu {
+            padding-left: 2rem;
+            background-color: #f8f9fa;
+        }
+        
+        .submenu .menu-item {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+        
+        /* Right Content Panel (70% on desktop, full on mobile) */
+        .content-panel {
+            width: 85%;
+            background: #f8f9fa;
+            overflow-y: auto;
+            padding: 2rem;
+        }
+        
+        /* Mobile Responsive */
+        .mobile-toggle {
+            display: none;
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+            background: #667eea;
+            border: none;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-toggle {
+                display: block;
+                top: 1rem;
+                right: 1rem;
+                z-index: 1001;
+            }
+            
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                width: 280px;
+                z-index: 999;
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .content-panel {
+                width: 100%;
+                margin-left: 0;
+            }
+        }
+        
+        /* Dashboard Content Styles */
+        .broker-card {
+            background: linear-gradient(135deg, #0000ff 0%, #000000 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .broker-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .broker-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: url('/static/deltaexchg.png') no-repeat center center;
+            background-size: contain;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .broker-details h5 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        
+        .broker-details p {
+            margin: 0;
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        .wallet-info {
+            text-align: right;
+        }
+        
+        .wallet-balance {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        
+        .market-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 0.5rem;
+            min-width: 200px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .market-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .market-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .coin-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #e9ecef;
+        }
+        
+        .market-symbol {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 1.1rem;
+        }
+        
+        .market-name {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .market-price {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #28a745;
+        }
+        
+        /* Loading states for market cards */
+        .market-card.loading {
+            opacity: 0.7;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .loading-text {
+            color: #6c757d !important;
+            font-style: italic;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+        
+        .market-scroll {
+            display: flex;
+            overflow-x: auto;
+            padding: 1rem 0;
+            gap: 1rem;
+        }
+        
+        /* Strategy Panel Styles */
+        .strategy-header {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .strategy-status {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .status-live {
+            background: #d4edda;
+            color: #155724;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .config-section {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .logs-section {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .logs-content {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        /* Broker Setup Styles */
+        .broker-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .add-broker-btn {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+        }
+        
+        .add-broker-btn:hover {
+            background: linear-gradient(135deg, #0056b3, #004085);
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        }
+        
+        .broker-form {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            display: none;
+        }
+        
+        .broker-form.show {
+            display: block;
+        }
+        
+        /* Mobile Card Styles */
+        .broker-card .card {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            transition: all 0.3s ease;
+            background: linear-gradient(145deg, #ffffff, #f8f9fa);
+        }
+        
+        .broker-card .card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+            border-color: #9ca3af;
+        }
+        
+        .broker-card .card-body {
+            padding: 1rem;
+        }
+        
+        .broker-card .card-title {
+            color: #374151;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        
+        .broker-card .fw-bold {
+            color: #1f2937;
+            font-size: 0.9rem;
+        }
+        
+        .broker-card .text-truncate {
+            color: #6b7280;
+            font-size: 0.85rem;
+            font-family: 'Courier New', monospace;
+            background: #f3f4f6;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .broker-card .broker-logo {
+            border-radius: 4px;
+            object-fit: contain;
+            background: url('/static/deltaexchg.png') no-repeat center center;
+            background-size: contain;
+        }
+        
+        .broker-card .card-body {
+            padding: 1.25rem;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 576px) {
+            .broker-card .card-body {
+                padding: 0.875rem;
+            }
+            
+            .broker-card .card-title {
+                font-size: 0.95rem;
+            }
+            
+            .broker-card .text-truncate {
+                font-size: 0.8rem;
+                padding: 0.2rem 0.4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Toggle Button -->
+    <button class="mobile-toggle" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <!-- Title Section -->
+    <div class="title-section">
+        <div class="title-left">
+            <img src="/static/TradeMantan_Logo.png" alt="Trade Manthan Logo" class="logo">
+            <div class="title-text">
+                <h1>Trade Manthan</h1>
+                <p>The automated trading platform</p>
+            </div>
+        </div>
+        <div class="title-right">
+            <div class="welcome-text">Welcome, <span id="userName">User</span></div>
+            <div class="datetime" id="currentDateTime"></div>
+        </div>
+    </div>
+    
+    <!-- Main Content Area -->
+    <div class="main-content">
+        <!-- Left Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-menu">
+                <a href="#" class="menu-item active" onclick="loadPanel('dashboard', event)">
+                    <i class="fas fa-tachometer-alt"></i>Dashboard
+                </a>
+                <a href="#" class="menu-item" onclick="loadPanel('strategy', event)">
+                    <i class="fas fa-chart-line"></i>Strategy
+                </a>
+                <a href="#" class="menu-item" onclick="loadPanel('broker', event)">
+                    <i class="fas fa-university"></i>Broker Setup
+                </a>
+                <a href="#" class="menu-item" onclick="loadPanel('settings', event)">
+                    <i class="fas fa-cog"></i>Settings
+                </a>
+                <a href="#" class="menu-item" onclick="loadPanel('reports', event)">
+                    <i class="fas fa-file-alt"></i>Reports
+                </a>
+                <a href="/logout" class="menu-item">
+                    <i class="fas fa-sign-out-alt"></i>Logout
+                </a>
+            </div>
+        </div>
+        
+        <!-- Right Content Panel -->
+        <div class="content-panel" id="contentPanel">
+            <!-- Dashboard content will be loaded here -->
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-text">© 2025 TradeManthan</div>
+        </div>
+    </footer>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let currentPanel = 'dashboard';
+        let userProfile = {};
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUserProfile();
+            updateDateTime();
+            loadPanel('dashboard');
+            setInterval(updateDateTime, 1000);
+        });
+        
+        // Load user profile
+        async function loadUserProfile() {
+            try {
+                const response = await fetch('/api/user/profile');
+                userProfile = await response.json();
+                document.getElementById('userName').textContent = userProfile.name;
+            } catch (error) {
+                console.error('Error loading user profile:', error);
+            }
+        }
+        
+        // Update date and time
+        function updateDateTime() {
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            };
+            document.getElementById('currentDateTime').textContent = now.toLocaleDateString('en-US', options);
+        }
+        
+        // Toggle sidebar on mobile
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('show');
+        }
+        
+        // Load different panels
+        async function loadPanel(panelName, event = null) {
+            try {
+                console.log('Loading panel:', panelName);
+                currentPanel = panelName;
+                
+                // Update active menu item
+                if (event && event.target) {
+                    document.querySelectorAll('.menu-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    event.target.classList.add('active');
+                }
+                
+                // Close sidebar on mobile
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').classList.remove('show');
+                }
+                
+                const contentPanel = document.getElementById('contentPanel');
+                if (!contentPanel) {
+                    console.error('Content panel not found');
+                    return;
+                }
+                
+                let content = '';
+                switch(panelName) {
+                    case 'dashboard':
+                        content = await loadDashboardContent();
+                        break;
+                    case 'strategy':
+                        content = await loadStrategyContent();
+                        break;
+                    case 'broker':
+                        content = await loadBrokerContent();
+                        break;
+                    case 'settings':
+                        content = await loadSettingsContent();
+                        break;
+                    default:
+                        content = '<div class="text-center mt-5"><h3>Coming Soon</h3><p>This feature is under development.</p></div>';
+                }
+                
+                contentPanel.innerHTML = content;
+                console.log('Panel loaded successfully:', panelName);
+                
+                // If dashboard is loaded, start progressive loading of coin cards
+                if (panelName === 'dashboard') {
+                    // Small delay to ensure DOM is ready
+                    setTimeout(() => {
+                        loadCoinCardsProgressively();
+                    }, 100);
+                }
+            } catch (error) {
+                console.error('Error loading panel:', panelName, error);
+                const contentPanel = document.getElementById('contentPanel');
+                if (contentPanel) {
+                    contentPanel.innerHTML = `<div class="alert alert-danger">Error loading ${panelName}: ${error.message}</div>`;
+                }
+            }
+        }
+        
+        // Load dashboard content
+        async function loadDashboardContent() {
+            try {
+                const brokerConnections = await fetch('/api/broker-connections').then(r => r.json());
+                
+                // Define specific coins to display
+                const specificCoins = [
+                    { symbol: 'BTCUSD', name: 'Bitcoin', logoId: '1' },
+                    { symbol: 'ETHUSD', name: 'Ethereum', logoId: '1027' },
+                    { symbol: 'XRPUSD', name: 'XRP', logoId: '52' },
+                    { symbol: 'SOLUSD', name: 'Solana', logoId: '5426' },
+                    { symbol: 'DOGEUSD', name: 'Dogecoin', logoId: '74' }
+                ];
+                
+                // Fetch wallet balances for each broker connection
+                const brokerCardsWithBalances = await Promise.all(
+                    brokerConnections.map(async (broker) => {
+                        try {
+                            const balanceResponse = await fetch(`/api/broker-connections/${broker.id}/wallet-balance`);
+                            const balanceData = await balanceResponse.json();
+                            
+                            let balanceDisplay = 'Loading...';
+                            if (balanceData.success) {
+                                balanceDisplay = `$${parseFloat(balanceData.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            } else {
+                                balanceDisplay = 'Error';
+                            }
+                            
+                            return `
+                                <div class="col-md-4 mb-3">
+                                    <div class="broker-card">
+                                        <div class="broker-info">
+                                            <div class="broker-logo">
+                                            </div>
+                                            <div class="broker-details">
+                                                <h5>${broker.connection_name}</h5>
+                                                <p>${broker.broker_id}</p>
+                                            </div>
+                                        </div>
+                                        <div class="wallet-info">
+                                            <div class="wallet-balance">${balanceDisplay}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        } catch (error) {
+                            console.error(`Error fetching balance for broker ${broker.id}:`, error);
+                            return `
+                                <div class="col-md-4 mb-3">
+                                    <div class="broker-card">
+                                        <div class="broker-info">
+                                            <div class="broker-logo">
+                                            </div>
+                                            <div class="broker-details">
+                                                <h5>${broker.connection_name}</h5>
+                                                <p>${broker.broker_id}</p>
+                                            </div>
+                                        </div>
+                                        <div class="wallet-info">
+                                            <div class="wallet-balance">Error</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    })
+                );
+                
+                // Return the dashboard with broker connections first, then load coins progressively
+                return `
+                    <h2 class="mb-4">Dashboard</h2>
+                    
+                    <!-- Broker Connections -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h4 class="mb-3">Broker Connections</h4>
+                            <div class="row">
+                                ${brokerCardsWithBalances.join('')}
+                                ${brokerConnections.length === 0 ? `
+                                    <div class="col-12">
+                                        <div class="text-center p-4">
+                                            <h5>No Broker Connections</h5>
+                                            <p class="text-muted">Add your first broker connection to get started.</p>
+                                            <button class="btn btn-primary" onclick="loadPanel('broker')">
+                                                <i class="fas fa-plus me-2"></i>Add Broker
+                                            </button>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Market Updates -->
+                    <div class="row">
+                        <div class="col-12">
+                            <h4 class="mb-3">Market Updates</h4>
+                            <div class="market-scroll" id="marketScroll">
+                                <!-- Coin cards will be loaded here progressively -->
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                return '<div class="alert alert-danger">Error loading dashboard content.</div>';
+            }
+        }
+        
+        // Load coin cards progressively
+        async function loadCoinCardsProgressively() {
+            const specificCoins = [
+                { symbol: 'BTCUSD', name: 'Bitcoin', logoId: '1' },
+                { symbol: 'ETHUSD', name: 'Ethereum', logoId: '1027' },
+                { symbol: 'XRPUSD', name: 'XRP', logoId: '52' },
+                { symbol: 'SOLUSD', name: 'Solana', logoId: '5426' },
+                { symbol: 'DOGEUSD', name: 'Dogecoin', logoId: '74' }
+            ];
+            
+            const marketScroll = document.getElementById('marketScroll');
+            if (!marketScroll) return;
+            
+            // Load each coin card individually as it becomes ready
+            for (const coin of specificCoins) {
+                try {
+                    // Create a loading card first
+                    const loadingCard = createCoinCard(coin, 'Loading...', 'loading');
+                    marketScroll.appendChild(loadingCard);
+                    
+                    // Fetch price in background
+                    const binanceSymbol = coin.symbol.replace('USD', 'USDT');
+                    const binanceResponse = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${binanceSymbol}`);
+                    const binanceData = await binanceResponse.json();
+                    
+                    let priceDisplay = 'Error';
+                    if (binanceData.price) {
+                        const price = parseFloat(binanceData.price);
+                        priceDisplay = `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+                    }
+                    
+                    // Replace loading card with actual data
+                    const actualCard = createCoinCard(coin, priceDisplay, 'loaded');
+                    marketScroll.replaceChild(actualCard, loadingCard);
+                    
+                    // Small delay to show progressive loading effect
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    
+                } catch (error) {
+                    console.error(`Error fetching price for ${coin.symbol}:`, error);
+                    const errorCard = createCoinCard(coin, 'Error', 'error');
+                    marketScroll.appendChild(errorCard);
+                }
+            }
+        }
+        
+        // Helper function to create coin cards
+        function createCoinCard(coin, priceDisplay, status) {
+            const logoUrl = `https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.logoId}.png`;
+            const cardClass = status === 'loading' ? 'market-card loading' : 'market-card';
+            
+            const card = document.createElement('div');
+            card.className = cardClass;
+            card.innerHTML = `
+                <div class="market-header">
+                    <img src="${logoUrl}" alt="${coin.name}" class="coin-logo" onerror="this.src='https://via.placeholder.com/32x32/6c757d/ffffff?text=${coin.symbol.charAt(0)}'">
+                    <div class="market-symbol">${coin.symbol}</div>
+                </div>
+                <div class="market-name">${coin.name}</div>
+                <div class="market-price ${status === 'loading' ? 'loading-text' : ''}">${priceDisplay}</div>
+            `;
+            
+            return card;
+        }
+        
+        // Load SuperTrend content
+        async function loadSupertrendContent() {
+            try {
+                const [status, brokerConnections, config] = await Promise.all([
+                    fetch('/api/strategy/supertrend/status').then(r => r.json()),
+                    fetch('/api/broker-connections').then(r => r.json()),
+                    fetch('/api/strategy/supertrend/config').then(r => r.json())
+                ]);
+                
+                // Handle case when config is null (new user)
+                const configData = config && config.config_data ? config.config_data : {
+                    take_profit_multiplier: 2.0,
+                    trailing_stop: true,
+                    candle_size: '5m',
+                    supertrend_period: 10,
+                    supertrend_multiplier: 3.0
+                };
+                
+                const brokerConnectionId = config && config.broker_connection_id ? config.broker_connection_id : null;
+                
+                const brokerOptions = brokerConnections.map(broker => 
+                    `<option value="${broker.id}" ${brokerConnectionId == broker.id ? 'selected' : ''}>
+                        ${broker.connection_name} (${broker.broker_id})
+                    </option>`
+                ).join('');
+                
+                const startTime = status.start_time ? new Date(status.start_time).toLocaleString() : 'Not started';
+                const lastUpdated = status.last_updated ? new Date(status.last_updated).toLocaleString() : 'Never';
+                
+                return `
+                    <h2 class="mb-4">SuperTrend Strategy</h2>
+                    
+                    <!-- Strategy Header -->
+                    <div class="strategy-header">
+                        <div class="strategy-status">
+                            <span class="status-badge ${status.is_running ? 'status-live' : 'status-stopped'}">
+                                <i class="fas ${status.is_running ? 'fa-play' : 'fa-stop'} me-2"></i>
+                                ${status.is_running ? 'LIVE' : 'STOPPED'}
+                            </span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${status.is_running ? 'checked' : ''} onchange="toggleStrategy(this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                            <div class="ms-auto">
+                                <strong>P&L:</strong> <span class="${status.pnl >= 0 ? 'text-success' : 'text-danger'}">$${status.pnl.toFixed(2)}</span>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    <strong>Started:</strong> ${startTime}
+                                </small>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">
+                                    <i class="fas fa-sync me-1"></i>
+                                    <strong>Last Updated:</strong> ${lastUpdated}
+                                </small>
+                            </div>
+                        </div>
+                        <div class="text-muted mt-2">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Ensure the correct configuration before switching ON
+                        </div>
+                    </div>
+                    
+                    <!-- Configuration -->
+                    <div class="config-section">
+                        <h4 class="mb-3">Configuration</h4>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Broker Connection</label>
+                                <select class="form-select" id="brokerSelect">
+                                    <option value="">Select Broker Connection</option>
+                                    ${brokerOptions}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Take Profit Multiplier</label>
+                                <input type="number" class="form-control" id="takeProfitMultiplier" value="${configData.take_profit_multiplier || 2.0}" step="0.1">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Trailing Stop</label>
+                                <select class="form-select" id="trailingStop">
+                                    <option value="true" ${configData.trailing_stop !== false ? 'selected' : ''}>Enabled</option>
+                                    <option value="false" ${configData.trailing_stop === false ? 'selected' : ''}>Disabled</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Candle Size/Duration</label>
+                                <select class="form-select" id="candleSize">
+                                    <option value="1m" ${configData.candle_size === '1m' ? 'selected' : ''}>1 Minute</option>
+                                    <option value="5m" ${configData.candle_size === '5m' || !configData.candle_size ? 'selected' : ''}>5 Minutes</option>
+                                    <option value="15m" ${configData.candle_size === '15m' ? 'selected' : ''}>15 Minutes</option>
+                                    <option value="1h" ${configData.candle_size === '1h' ? 'selected' : ''}>1 Hour</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">SuperTrend Period</label>
+                                <input type="number" class="form-control" id="supertrendPeriod" value="${configData.supertrend_period || 10}" min="1" max="50">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">SuperTrend Multiplier</label>
+                                <input type="number" class="form-control" id="supertrendMultiplier" value="${configData.supertrend_multiplier || 3.0}" step="0.1" min="0.1" max="10.0">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary" onclick="saveStrategyConfig()">
+                                <i class="fas fa-save me-2"></i>Save Configuration
+                            </button>
+                            <button class="btn btn-success" onclick="saveAndStartStrategy()">
+                                <i class="fas fa-play me-2"></i>Save & Start
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Logs -->
+                    <div class="logs-section">
+                        <h4 class="mb-3 d-flex justify-content-between align-items-center" onclick="toggleLogs()" style="cursor: pointer;">
+                            <span><i class="fas fa-chevron-down me-2"></i>LOGS</span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); refreshLogs()" style="font-size: 0.8rem;">
+                                <i class="fas fa-sync-alt me-1"></i>Refresh
+                            </button>
+                        </h4>
+                        <div class="logs-content" id="logsContent" style="display: none;">
+                            <div class="text-muted">Loading logs...</div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading SuperTrend:', error);
+                return '<div class="alert alert-danger">Error loading SuperTrend content.</div>';
+            }
+        }
+        
+        // Load broker content
+        async function loadBrokerContent() {
+            try {
+                const connections = await fetch('/api/broker-connections').then(r => r.json());
+                
+                return `
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2>Broker Connection Setup</h2>
+                        <button class="add-broker-btn" onclick="toggleBrokerForm()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Add Broker Form -->
+                    <div class="broker-form" id="brokerForm">
+                        <h4 class="mb-3">Add New Broker Connection</h4>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Broker Connection Name</label>
+                                <input type="text" class="form-control" id="connectionName" placeholder="e.g., Delta Exchange">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Broker ID</label>
+                                <input type="text" class="form-control" id="brokerId" placeholder="e.g., delta">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Broker API URL</label>
+                                <input type="url" class="form-control" id="brokerUrl" placeholder="https://api.delta.exchange">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">API Key</label>
+                                <input type="text" class="form-control" id="apiKey" placeholder="Your API Key">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">API Secret</label>
+                                <input type="password" class="form-control" id="apiSecret" placeholder="Your API Secret">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-secondary" onclick="toggleBrokerForm()">Cancel</button>
+                            <button class="btn btn-primary" onclick="saveBrokerConnection()">Submit</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Broker Connections Table -->
+                    <div class="broker-table">
+                        <!-- Desktop Table View -->
+                        <div class="d-none d-md-block">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Broker Connection Name</th>
+                                        <th>Broker ID</th>
+                                        <th>Broker URL</th>
+                                        <th>API Key</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${connections.map(conn => `
+                                        <tr>
+                                            <td>${conn.connection_name}</td>
+                                            <td>${conn.broker_id}</td>
+                                            <td>${conn.broker_url}</td>
+                                            <td>${conn.api_key}</td>
+                                            <td>${new Date(conn.created_at).toLocaleDateString()}</td>
+                                            <td><button class="btn btn-danger btn-sm rounded-circle" onclick="deleteBrokerConnection(${conn.id})" title="Delete" style="width: 32px; height: 32px; padding: 0;"><i class="fas fa-trash"></i></button></td>
+                                        </tr>
+                                    `).join('')}
+                                    ${connections.length === 0 ? `
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                No broker connections found. Click the + button to add one.
+                                            </td>
+                                        </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Mobile Card View -->
+                        <div class="d-md-none">
+                            ${connections.map(conn => `
+                                <div class="broker-card mb-3">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <!-- Line 1: Logo + Connection Name -->
+                                            <div class="d-flex align-items-center mb-2">
+                                                ${conn.broker_url.includes('delta.exchange') ? '<img src="/static/deltaexchg.png" alt="Delta Exchange" class="broker-logo me-2" style="width: 20px; height: 20px;">' : ''}
+                                                <h6 class="card-title mb-0">${conn.connection_name}</h6>
+                                            </div>
+                                            
+                                            <!-- Line 2: Broker ID + Delete Button -->
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <span class="fw-bold">${conn.broker_id}</span>
+                                                <button class="btn btn-danger btn-sm rounded-circle" onclick="deleteBrokerConnection(${conn.id})" title="Delete" style="width: 28px; height: 28px; padding: 0;"><i class="fas fa-trash"></i></button>
+                                            </div>
+                                            
+                                            <!-- Line 3: Broker URL -->
+                                            <div class="mb-2">
+                                                <div class="text-truncate" title="${conn.broker_url}">${conn.broker_url}</div>
+                                            </div>
+                                            
+                                            <!-- Line 4: API Key -->
+                                            <div class="mb-0">
+                                                <div class="text-truncate" title="${conn.api_key}">${conn.api_key}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                            ${connections.length === 0 ? `
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-info-circle fa-2x mb-3"></i>
+                                    <p>No broker connections found.</p>
+                                    <p>Click the + button to add one.</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading broker content:', error);
+                return '<div class="alert alert-danger">Error loading broker content.</div>';
+            }
+        }
+        
+        // Load strategy content
+        async function loadStrategyContent() {
+            try {
+                // Use the global strategies data
+                const strategies = strategiesData;
+                
+                return `
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2>Strategy Management</h2>
+                        <button class="btn btn-primary rounded-circle" onclick="toggleStrategyForm()" style="width: 50px; height: 50px; padding: 0;">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Strategy Form (New/Edit) -->
+                    <div class="strategy-form" id="strategyForm" style="display: none;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0" id="formTitle">Create New Strategy</h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- Add/Edit section content removed -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Deploy Strategy Modal -->
+                    <div class="modal fade" id="deployStrategyModal" tabindex="-1" aria-labelledby="deployStrategyModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="deployStrategyModalLabel">Deploy Strategy</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <form id="deployStrategyForm">
+                                        <div class="mb-3">
+                                            <label class="form-label">Strategy Name</label>
+                                            <input type="text" class="form-control" id="deployStrategyName" readonly>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Select Broker Connection</label>
+                                            <select class="form-control" id="deployBrokerConnection" required>
+                                                <option value="">Choose a broker connection...</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="deployTermsAgreement" required>
+                                                <label class="form-check-label" for="deployTermsAgreement">
+                                                    I agree to the terms and conditions for deploying this trading strategy
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-primary" onclick="deployStrategy()">Deploy Strategy</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Deployed Strategy Details Modal -->
+                    <div class="modal fade" id="deployedDetailsModal" tabindex="-1" aria-labelledby="deployedDetailsModalLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="deployedDetailsModalLabel">Strategy Deployment Details</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Strategy Name</label>
+                                        <input type="text" class="form-control" id="deployedStrategyName" readonly>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Broker Connection</label>
+                                        <input type="text" class="form-control" id="deployedBrokerName" readonly>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Deployment Status</label>
+                                        <div class="alert alert-success">
+                                            <i class="fas fa-check-circle"></i> Successfully Deployed
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-warning">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        <strong>Warning:</strong> Detaching will remove the relationship between this strategy and the broker connection. The strategy will no longer be able to execute trades.
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="button" class="btn btn-danger" onclick="detachStrategy()">Detach Strategy</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Strategies Table (Desktop View) -->
+                    <div class="table-responsive d-none d-md-block">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Strategy Name</th>
+                                    <th>Indicators</th>
+                                    <th>Parameters</th>
+                                    <th>Created/Modified</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${strategies.map(strategy => `
+                                    <tr>
+                                        <td><strong><a href="#" class="strategy-name-link" onclick="editStrategy(${strategy.id})" title="Click to edit strategy">${strategy.name}</a></strong></td>
+                                        <td>${strategy.indicators.join(', ')}</td>
+                                        <td>${strategy.parameters}</td>
+                                        <td>
+                                            <small class="text-muted">
+                                                Created: ${new Date(strategy.created_at).toLocaleDateString()}<br>
+                                                Modified: ${new Date(strategy.modified_at).toLocaleDateString()}
+                                            </small>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" ${strategy.is_running ? 'checked' : ''} onchange="toggleStrategy(${strategy.id}, this.checked)">
+                                                    <span class="slider"></span>
+                                                </label>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                ${strategy.is_deployed ? 
+                                                    `<button class="btn btn-primary btn-sm deploy-btn" onclick="showDeployedDetails(${strategy.id})">Deployed</button>` :
+                                                    `<button class="btn btn-outline-primary btn-sm deploy-btn" onclick="showDeployPopup(${strategy.id})">Deploy</button>`
+                                                }
+                                                <button class="btn strategy-icon-btn btn-info" onclick="showLogs(${strategy.id})" title="View Logs">
+                                                    <i class="fas fa-file-alt"></i>
+                                                </button>
+                                                <button class="btn strategy-icon-btn btn-danger" onclick="deleteStrategy(${strategy.id})" title="Delete">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Strategies Cards (Mobile View) -->
+                    <div class="d-md-none">
+                        <div class="row">
+                            ${strategies.map(strategy => `
+                                <div class="col-12 mb-3">
+                                    <div class="strategy-card">
+                                        <div class="strategy-card-header">
+                                            <div class="strategy-name-section">
+                                                <h5 class="strategy-name">
+                                                    <a href="#" class="strategy-name-link" onclick="editStrategy(${strategy.id})" title="Click to edit strategy">
+                                                        ${strategy.name}
+                                                    </a>
+                                                </h5>
+                                                                                            <div class="strategy-status">
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" ${strategy.is_running ? 'checked' : ''} onchange="toggleStrategy(${strategy.id}, this.checked)">
+                                                    <span class="slider"></span>
+                                                </label>
+                                            </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="strategy-card-body">
+                                            <div class="strategy-info-row">
+                                                <div class="strategy-info-label">Indicators:</div>
+                                                <div class="strategy-info-value">${strategy.indicators.join(', ')}</div>
+                                            </div>
+                                            
+                                            <div class="strategy-info-row">
+                                                <div class="strategy-info-label">Parameters:</div>
+                                                <div class="strategy-info-value">${strategy.parameters}</div>
+                                            </div>
+                                            
+                                            <div class="strategy-info-row">
+                                                <div class="strategy-info-label">Created:</div>
+                                                <div class="strategy-info-value">${new Date(strategy.created_at).toLocaleDateString()}</div>
+                                            </div>
+                                            
+                                            <div class="strategy-info-row">
+                                                <div class="strategy-info-label">Modified:</div>
+                                                <div class="strategy-info-value">${new Date(strategy.modified_at).toLocaleDateString()}</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="strategy-card-actions">
+                                            <div class="strategy-actions-row">
+                                                ${strategy.is_deployed ? 
+                                                    `<button class="btn btn-primary btn-sm deploy-btn" onclick="showDeployedDetails(${strategy.id})">Deployed</button>` :
+                                                    `<button class="btn btn-outline-primary btn-sm deploy-btn" onclick="showDeployedDetails(${strategy.id})">Deploy</button>`
+                                                }
+                                                <button class="btn strategy-icon-btn btn-info" onclick="showLogs(${strategy.id})" title="View Logs">
+                                                    <i class="fas fa-file-alt"></i>
+                                                </button>
+                                                <button class="btn strategy-icon-btn btn-danger" onclick="deleteStrategy(${strategy.id})" title="Delete">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading strategy content:', error);
+                return '<div class="alert alert-danger">Error loading strategy content.</div>';
+            }
+        }
+        
+        // Strategy Management Functions
+        function toggleStrategyForm() {
+            const form = document.getElementById('strategyForm');
+            const isVisible = form.style.display !== 'none';
+            form.style.display = isVisible ? 'none' : 'block';
+            
+            if (!isVisible) {
+                // Show form and shift table down
+                form.style.marginBottom = '2rem';
+                // Reset form for new strategy
+                resetStrategyForm();
+                // Add event listeners for dynamic parameter fields
+                setupParameterFields();
+                // Initialize with default indicator selection for new strategies
+                initializeDefaultIndicatorSelection();
+            }
+        }
+        
+        function editStrategy(strategyId) {
+            // Find the strategy data
+            const strategy = findStrategyById(strategyId);
+            if (!strategy) {
+                alert('Strategy not found!');
+                return;
+            }
+            
+            // Show the form
+            const form = document.getElementById('strategyForm');
+            form.style.display = 'block';
+            form.style.marginBottom = '2rem';
+            
+            // Update form title and button
+            document.getElementById('formTitle').textContent = 'Edit Strategy';
+            document.getElementById('saveButton').textContent = 'Update Strategy';
+            
+            // Fill form with strategy data
+            fillStrategyForm(strategy);
+            
+            // Add event listeners for dynamic parameter fields
+            setupParameterFields();
+        }
+        
+        function findStrategyById(strategyId) {
+            // Use the global strategies data
+            return strategiesData.find(s => s.id === parseInt(strategyId));
+        }
+        
+        function fillStrategyForm(strategy) {
+            // Set strategy ID
+            document.getElementById('strategyId').value = strategy.id;
+            
+            // Set strategy name
+            document.getElementById('strategyName').value = strategy.name;
+            
+            // Set strategy type
+            if (strategy.type === 'price') {
+                document.getElementById('priceType').checked = true;
+            } else {
+                document.getElementById('indicatorType').checked = true;
+            }
+            
+            // Set indicators
+            document.getElementById('supertrend').checked = strategy.indicators.includes('SuperTrend');
+            document.getElementById('rsi').checked = strategy.indicators.includes('RSI');
+            document.getElementById('bollinger').checked = strategy.indicators.includes('Bollinger Band');
+            document.getElementById('ema').checked = strategy.indicators.includes('EMA');
+            
+            // Set general configuration
+            document.getElementById('candleSize').value = strategy.candleSize;
+            document.getElementById('trailingStop').value = strategy.trailingStop;
+            document.getElementById('profitMultiplier').value = strategy.profitMultiplier;
+            
+            // Update parameter fields to show current values
+            updateParameterFields();
+            
+            // Fill parameter values if they exist
+            setTimeout(() => {
+                if (strategy.parameters.supertrend) {
+                    const periodField = document.getElementById('supertrendPeriod');
+                    const multiplierField = document.getElementById('supertrendMultiplier');
+                    if (periodField) periodField.value = strategy.parameters.supertrend.period;
+                    if (multiplierField) multiplierField.value = strategy.parameters.supertrend.multiplier;
+                }
+                
+                if (strategy.parameters.rsi) {
+                    const lengthField = document.getElementById('rsiLength');
+                    const upperField = document.getElementById('rsiUpper');
+                    const lowerField = document.getElementById('rsiLower');
+                    if (lengthField) lengthField.value = strategy.parameters.rsi.length;
+                    if (upperField) upperField.value = strategy.parameters.rsi.upper;
+                    if (lowerField) lowerField.value = strategy.parameters.rsi.lower;
+                }
+                
+                if (strategy.parameters.bollinger) {
+                    const lengthField = document.getElementById('bbLength');
+                    const stdDevField = document.getElementById('bbStdDev');
+                    if (lengthField) lengthField.value = strategy.parameters.bollinger.length;
+                    if (stdDevField) stdDevField.value = strategy.parameters.bollinger.stdDev;
+                }
+                
+                if (strategy.parameters.ema) {
+                    const ema1Field = document.getElementById('ema1');
+                    const ema2Field = document.getElementById('ema2');
+                    const ema3Field = document.getElementById('ema3');
+                    if (ema1Field) ema1Field.value = strategy.parameters.ema.ema1;
+                    if (ema2Field) ema2Field.value = strategy.parameters.ema.ema2;
+                    if (ema3Field) ema3Field.value = strategy.parameters.ema.ema3;
+                }
+            }, 100);
+        }
+        
+        function resetStrategyForm() {
+            // Reset form title and button
+            document.getElementById('formTitle').textContent = 'Create New Strategy';
+            document.getElementById('saveButton').textContent = 'Save Strategy';
+            
+            // Clear strategy ID
+            document.getElementById('strategyId').value = '';
+            
+            // Reset form fields
+            document.getElementById('strategyForm').reset();
+            
+            // Reset indicators
+            document.getElementById('indicatorType').checked = true;
+            document.getElementById('priceType').checked = false;
+            
+            // Don't clear parameter fields here - let initializeDefaultIndicatorSelection handle it
+        }
+        
+        // Add form submit handler
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('strategyForm');
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    handleStrategySubmit();
+                });
+            }
+        });
+        
+        function handleStrategySubmit() {
+            const strategyId = document.getElementById('strategyId').value;
+            const isEdit = strategyId !== '';
+            
+            // Collect form data
+            const formData = collectFormData();
+            
+            if (isEdit) {
+                // Update existing strategy
+                updateStrategy(strategyId, formData);
+            } else {
+                // Create new strategy
+                createStrategy(formData);
+            }
+        }
+        
+        function collectFormData() {
+            const selectedIndicators = [];
+            if (document.getElementById('supertrend').checked) selectedIndicators.push('SuperTrend');
+            if (document.getElementById('rsi').checked) selectedIndicators.push('RSI');
+            if (document.getElementById('bollinger').checked) selectedIndicators.push('Bollinger Band');
+            if (document.getElementById('ema').checked) selectedIndicators.push('EMA');
+            
+            const formData = {
+                name: document.getElementById('strategyName').value,
+                type: document.getElementById('indicatorType').checked ? 'indicator' : 'price',
+                indicators: selectedIndicators,
+                parameters: {},
+                candleSize: document.getElementById('candleSize').value,
+                trailingStop: document.getElementById('trailingStop').value,
+                profitMultiplier: parseFloat(document.getElementById('profitMultiplier').value)
+            };
+            
+            // Collect indicator-specific parameters
+            if (document.getElementById('supertrend').checked) {
+                formData.parameters.supertrend = {
+                    period: parseInt(document.getElementById('supertrendPeriod').value),
+                    multiplier: parseFloat(document.getElementById('supertrendMultiplier').value)
+                };
+            }
+            
+            if (document.getElementById('rsi').checked) {
+                formData.parameters.rsi = {
+                    length: parseInt(document.getElementById('rsiLength').value),
+                    upper: parseInt(document.getElementById('rsiUpper').value),
+                    lower: parseInt(document.getElementById('rsiLower').value)
+                };
+            }
+            
+            if (document.getElementById('bollinger').checked) {
+                formData.parameters.bollinger = {
+                    length: parseInt(document.getElementById('bbLength').value),
+                    stdDev: parseFloat(document.getElementById('bbStdDev').value)
+                };
+            }
+            
+            if (document.getElementById('ema').checked) {
+                formData.parameters.ema = {
+                    ema1: parseInt(document.getElementById('ema1').value),
+                    ema2: parseInt(document.getElementById('ema2').value),
+                    ema3: parseInt(document.getElementById('ema3').value)
+                };
+            }
+            
+            return formData;
+        }
+        
+        function createStrategy(formData) {
+            console.log('Creating new strategy:', formData);
+            
+            // Here you would call the backend API to create a new strategy
+            // The backend should:
+            // 1. Save strategy configuration to database
+            // 2. Create trading strategy script with parameters
+            // 3. Set up strategy monitoring and execution framework
+            
+            // For now, simulate creating a new strategy by adding it to the global data
+            const newStrategy = {
+                id: Date.now(), // Generate a unique ID
+                name: formData.name,
+                indicators: formData.indicators,
+                parameters: Object.entries(formData.parameters)
+                    .filter(([key, value]) => value !== null)
+                    .map(([key, value]) => {
+                        if (key === 'supertrend' && value) {
+                            return `Period: ${value.period}, Multiplier: ${value.multiplier}`;
+                        } else if (key === 'rsi' && value) {
+                            return `Length: ${value.length}, Upper: ${value.upper}, Lower: ${value.lower}`;
+                        } else if (key === 'bollinger' && value) {
+                            return `Length: ${value.length}, StdDev: ${value.stdDev}`;
+                        } else if (key === 'ema' && value) {
+                            return `EMA-1: ${value.ema1}, EMA-2: ${value.ema2}, EMA-3: ${value.ema3}`;
+                        }
+                        return '';
+                    })
+                    .filter(param => param !== '')
+                    .join(', ') + `, Candle: ${formData.candleSize}`,
+                created_at: new Date().toISOString(),
+                modified_at: new Date().toISOString(),
+                is_deployed: false,
+                broker_connection: null,
+                is_running: false
+            };
+            
+            // Add to global data
+            strategiesData.push(newStrategy);
+            
+            // Show success message
+            alert('Strategy created successfully! Trading strategy script has been generated with the specified parameters.');
+            toggleStrategyForm(); // Hide form
+            // Reload the strategy panel to show the new strategy
+            loadStrategyPanel();
+        }
+        
+        function updateStrategy(strategyId, formData) {
+            console.log('Updating strategy:', strategyId, formData);
+            
+            // Here you would call the backend API to update the existing strategy
+            // The backend should:
+            // 1. Update strategy configuration in database
+            // 2. Regenerate trading strategy script with new parameters
+            // 3. Restart strategy monitoring if currently running
+            
+            // For now, simulate updating the strategy in the global data
+            const strategyIndex = strategiesData.findIndex(s => s.id === parseInt(strategyId));
+            if (strategyIndex !== -1) {
+                // Update the existing strategy
+                strategiesData[strategyIndex] = {
+                    ...strategiesData[strategyIndex],
+                    name: formData.name,
+                    indicators: formData.indicators,
+                    parameters: Object.entries(formData.parameters)
+                        .filter(([key, value]) => value !== null)
+                        .map(([key, value]) => {
+                            if (key === 'supertrend' && value) {
+                                return `Period: ${value.period}, Multiplier: ${value.multiplier}`;
+                            } else if (key === 'rsi' && value) {
+                                return `Length: ${value.length}, Upper: ${value.upper}, Lower: ${value.lower}`;
+                            } else if (key === 'bollinger' && value) {
+                                return `Length: ${value.length}, StdDev: ${value.stdDev}`;
+                            } else if (key === 'ema' && value) {
+                                return `EMA-1: ${value.ema1}, EMA-2: ${value.ema2}, EMA-3: ${value.ema3}`;
+                            }
+                            return '';
+                        })
+                        .filter(param => param !== '')
+                        .join(', ') + `, Candle: ${formData.candleSize}`,
+                    modified_at: new Date().toISOString()
+                };
+            }
+            
+            // Show success message
+            alert('Strategy updated successfully! Trading strategy script has been regenerated with the new parameters.');
+            toggleStrategyForm(); // Hide form
+            // Reload the strategy panel to show the updated strategy
+            loadStrategyPanel();
+        }
+        
+        // Function to load strategy panel and update menu state
+        async function loadStrategyPanel() {
+            try {
+                // Update current panel
+                currentPanel = 'strategy';
+                
+                // Update active menu item
+                document.querySelectorAll('.menu-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                // Find and activate the strategy menu item
+                const strategyMenuItem = document.querySelector('.menu-item[onclick*="strategy"]');
+                if (strategyMenuItem) {
+                    strategyMenuItem.classList.add('active');
+                }
+                
+                // Load strategy content
+                const contentPanel = document.getElementById('contentPanel');
+                if (contentPanel) {
+                    const content = await loadStrategyContent();
+                    contentPanel.innerHTML = content;
+                    
+                    // Re-initialize form event listeners
+                    setupParameterFields();
+                    
+                    console.log('Strategy panel loaded successfully');
+                }
+            } catch (error) {
+                console.error('Error loading strategy panel:', error);
+            }
+        }
+        
+        function setupParameterFields() {
+            const checkboxes = ['supertrend', 'rsi', 'bollinger', 'ema'];
+            const parameterFields = document.getElementById('parameterFields');
+            
+            checkboxes.forEach(id => {
+                const checkbox = document.getElementById(id);
+                checkbox.addEventListener('change', function() {
+                    updateParameterFields();
+                });
+            });
+            
+            updateParameterFields();
+        }
+        
+        function updateParameterFields() {
+            const parameterFields = document.getElementById('parameterFields');
+            let html = '';
+            
+            // SuperTrend parameters
+            if (document.getElementById('supertrend').checked) {
+                html += `
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <h6>SuperTrend Parameters</h6>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Period</label>
+                            <input type="number" class="form-control" id="supertrendPeriod" value="10" min="1" max="100">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Multiplier</label>
+                            <input type="number" class="form-control" id="supertrendMultiplier" value="3" min="0.1" max="10" step="0.1">
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // RSI parameters
+            if (document.getElementById('rsi').checked) {
+                html += `
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <h6>RSI Parameters</h6>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Length</label>
+                            <input type="number" class="form-control" id="rsiLength" value="14" min="1" max="100">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Upper Band</label>
+                            <input type="number" class="form-control" id="rsiUpper" value="70" min="50" max="100">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Lower Band</label>
+                            <input type="number" class="form-control" id="rsiLower" value="30" min="0" max="50">
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Bollinger Band parameters
+            if (document.getElementById('bollinger').checked) {
+                html += `
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <h6>Bollinger Band Parameters</h6>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Length</label>
+                            <input type="number" class="form-control" id="bbLength" value="20" min="1" max="100">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Standard Deviation</label>
+                            <input type="number" class="form-control" id="bbStdDev" value="2" min="0.1" max="5" step="0.1">
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // EMA parameters
+            if (document.getElementById('ema').checked) {
+                html += `
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <h6>EMA Parameters</h6>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">EMA-1</label>
+                            <input type="number" class="form-control" id="ema1" value="9" min="1" max="200">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">EMA-2</label>
+                            <input type="number" class="form-control" id="ema2" value="21" min="1" max="200">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">EMA-3</label>
+                            <input type="number" class="form-control" id="ema3" value="100" min="1" max="500">
+                        </div>
+                    </div>
+                `;
+            }
+            
+            parameterFields.innerHTML = html;
+        }
+        
+        function initializeDefaultIndicatorSelection() {
+            // For new strategies, check SuperTrend by default and show its parameters
+            const supertrendCheckbox = document.getElementById('supertrend');
+            if (supertrendCheckbox) {
+                supertrendCheckbox.checked = true;
+                // Trigger the change event to show SuperTrend parameters
+                const event = new Event('change');
+                supertrendCheckbox.dispatchEvent(event);
+            }
+        }
+        
+        function toggleStrategy(strategyId, isRunning) {
+            console.log(`Toggling strategy ${strategyId} to ${isRunning ? 'running' : 'stopped'}`);
+            
+            if (isRunning) {
+                // Starting the strategy
+                if (confirm(`Are you sure you want to start strategy ${strategyId}? This will begin live trading.`)) {
+                    // Here you would call the backend API to start the strategy
+                    console.log(`Starting strategy ${strategyId}`);
+                    alert(`Strategy ${strategyId} started successfully! Live trading is now active.`);
+                } else {
+                    // User cancelled, revert the toggle
+                    const checkbox = event.target;
+                    checkbox.checked = false;
+                }
+            } else {
+                // Stopping the strategy - immediate termination
+                if (confirm(`Are you sure you want to stop strategy ${strategyId}? This will immediately terminate all trading activities.`)) {
+                    // Here you would call the backend API to immediately stop/terminate the strategy
+                    console.log(`Immediately stopping/terminating strategy ${strategyId}`);
+                    alert(`Strategy ${strategyId} stopped successfully! All trading activities have been terminated.`);
+                } else {
+                    // User cancelled, revert the toggle
+                    const checkbox = event.target;
+                    checkbox.checked = true;
+                }
+            }
+        }
+        
+        function showDeployPopup(strategyId) {
+            // Find the strategy data
+            const strategy = findStrategyById(strategyId);
+            if (!strategy) {
+                alert('Strategy not found!');
+                return;
+            }
+            
+            // Populate the deploy modal
+            document.getElementById('deployStrategyName').value = strategy.name;
+            
+            // Load broker connections
+            loadBrokerConnectionsForDeploy();
+            
+            // Store strategy ID for deployment
+            document.getElementById('deployStrategyForm').setAttribute('data-strategy-id', strategyId);
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('deployStrategyModal'));
+            modal.show();
+        }
+        
+        function showDeployedDetails(strategyId) {
+            // Find the strategy data
+            const strategy = findStrategyById(strategyId);
+            if (!strategy) {
+                alert('Strategy not found!');
+                return;
+            }
+            
+            // Populate the deployed details modal
+            document.getElementById('deployedStrategyName').value = strategy.name;
+            document.getElementById('deployedBrokerName').value = strategy.broker_connection || 'Not specified';
+            
+            // Store strategy ID for detachment
+            document.getElementById('deployedDetailsModal').setAttribute('data-strategy-id', strategyId);
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('deployedDetailsModal'));
+            modal.show();
+        }
+        
+        function loadBrokerConnectionsForDeploy() {
+            // Fetch broker connections and populate the dropdown
+            fetch('/api/broker-connections')
+                .then(response => response.json())
+                .then(connections => {
+                    const select = document.getElementById('deployBrokerConnection');
+                    select.innerHTML = '<option value="">Choose a broker connection...</option>';
+                    
+                    connections.forEach(conn => {
+                        const option = document.createElement('option');
+                        option.value = conn.id;
+                        option.textContent = `${conn.connection_name} (${conn.broker_id})`;
+                        select.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading broker connections:', error);
+                });
+        }
+        
+        function deployStrategy() {
+            const strategyId = document.getElementById('deployStrategyForm').getAttribute('data-strategy-id');
+            const brokerConnectionId = document.getElementById('deployBrokerConnection').value;
+            const termsAgreed = document.getElementById('deployTermsAgreement').checked;
+            
+            if (!brokerConnectionId) {
+                alert('Please select a broker connection');
+                return;
+            }
+            
+            if (!termsAgreed) {
+                alert('Please agree to the terms and conditions');
+                return;
+            }
+            
+            // Here you would make an API call to deploy the strategy
+            console.log('Deploying strategy:', strategyId, 'to broker:', brokerConnectionId);
+            
+            // For now, show success message
+            alert('Strategy deployed successfully!');
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('deployStrategyModal'));
+            modal.hide();
+            
+            // Refresh the strategy list
+            loadStrategyPanel();
+        }
+        
+        function detachStrategy() {
+            const strategyId = document.getElementById('deployedDetailsModal').getAttribute('data-strategy-id');
+            
+            if (confirm('Are you sure you want to detach this strategy from the broker connection? This action cannot be undone.')) {
+                // Here you would make an API call to detach the strategy
+                console.log('Detaching strategy:', strategyId);
+                
+                // For now, show success message
+                alert('Strategy detached successfully!');
+                
+                // Close the modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('deployedDetailsModal'));
+                modal.hide();
+                
+                // Refresh the strategy list
+                loadStrategyPanel();
+            }
+        }
+        
+        function showLogs(strategyId) {
+            // This would open a new window with strategy logs
+            const logWindow = window.open('', '_blank', 'width=800,height=600');
+            logWindow.document.write(`
+                <html>
+                    <head><title>Strategy Logs - ${strategyId}</title></title>
+                    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+                </head>
+                <body>
+                    <div class="container mt-4">
+                        <h3>Strategy Logs</h3>
+                        <div class="alert alert-info">No logs available for this strategy.</div>
+                        <button class="btn btn-secondary" onclick="window.close()">Close</button>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+        
+        // Global strategy data management
+        let strategiesData = [
+            {
+                id: 1,
+                name: 'SuperTrend Strategy',
+                indicators: ['SuperTrend'],
+                parameters: 'Period: 10, Multiplier: 3, Candle: 5m',
+                created_at: '2025-08-12T10:00:00Z',
+                modified_at: '2025-08-12T15:30:00Z',
+                is_deployed: true,
+                broker_connection: 'Delta Exchange Demo',
+                is_running: true
+            },
+            {
+                id: 2,
+                name: 'RSI Strategy',
+                indicators: ['RSI'],
+                parameters: 'Length: 14, Upper: 70, Lower: 30, Candle: 15m',
+                created_at: '2025-08-11T09:00:00Z',
+                modified_at: '2025-08-11T14:20:00Z',
+                is_deployed: false,
+                broker_connection: null,
+                is_running: false
+            }
+        ];
+        
+        function deleteStrategy(strategyId) {
+            if (confirm('Are you sure you want to delete this strategy? This action cannot be undone.')) {
+                console.log(`Deleting strategy ${strategyId}`);
+                
+                // Remove the strategy from the global data
+                strategiesData = strategiesData.filter(strategy => strategy.id !== parseInt(strategyId));
+                
+                // Show success message
+                alert('Strategy deleted successfully!');
+                
+                // Reload the strategy panel to show updated data
+                loadStrategyPanel();
+            }
+        }
+        
+        // Load settings content
+        async function loadSettingsContent() {
+            try {
+                const settings = await fetch('/api/user/settings').then(r => r.json());
+                
+                return `
+                    <h2 class="mb-4">Settings</h2>
+                    
+                    <div class="config-section">
+                        <h4 class="mb-3">General Settings</h4>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Leverage</label>
+                                <input type="number" class="form-control" id="leverage" value="${settings.leverage || 10}" min="1" max="100">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Position Size (%)</label>
+                                <input type="number" class="form-control" id="positionSize" value="${(settings.position_size_percent || 0.1) * 100}" min="1" max="100" step="1">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Default Capital</label>
+                                <input type="number" class="form-control" id="defaultCapital" value="${settings.default_capital || 1000}" min="100" step="100">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Max Capital Loss (%)</label>
+                                <input type="number" class="form-control" id="maxLoss" value="${settings.max_capital_loss_percent || 5}" min="1" max="50" step="1">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveSettings()">
+                            <i class="fas fa-save me-2"></i>Save Settings
+                        </button>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                return '<div class="alert alert-danger">Error loading settings.</div>';
+            }
+        }
+        
+        // Toggle broker form
+        function toggleBrokerForm() {
+            const form = document.getElementById('brokerForm');
+            form.classList.toggle('show');
+        }
+        
+        // Save broker connection
+        async function saveBrokerConnection() {
+            const data = {
+                connection_name: document.getElementById('connectionName').value,
+                broker_id: document.getElementById('brokerId').value,
+                broker_url: document.getElementById('brokerUrl').value,
+                api_key: document.getElementById('apiKey').value,
+                api_secret: document.getElementById('apiSecret').value
+            };
+            
+            try {
+                const response = await fetch('/api/broker-connections', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Broker connection created successfully!');
+                    loadPanel('broker');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error saving broker connection: ' + error.message);
+            }
+        }
+        
+        // Delete broker connection
+        async function deleteBrokerConnection(connectionId) {
+            if (!confirm('Are you sure you want to delete this broker connection? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/broker-connections/${connectionId}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Broker connection deleted successfully!');
+                    loadPanel('broker');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error deleting broker connection: ' + error.message);
+            }
+        }
+        
+        // Save settings
+        async function saveSettings() {
+            const data = {
+                leverage: parseInt(document.getElementById('leverage').value),
+                position_size_percent: parseFloat(document.getElementById('positionSize').value) / 100,
+                default_capital: parseFloat(document.getElementById('defaultCapital').value),
+                max_capital_loss_percent: parseFloat(document.getElementById('maxLoss').value)
+            };
+            
+            try {
+                const response = await fetch('/api/user/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Settings saved successfully!');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error saving settings: ' + error.message);
+            }
+        }
+        
+        // Toggle strategy
+        async function toggleStrategy(isRunning) {
+            try {
+                const response = await fetch('/api/strategy/supertrend/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_running: isRunning })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // Show success message
+                    const message = isRunning ? 'Strategy started successfully!' : 'Strategy stopped successfully!';
+                    alert(message);
+                    // Reload the panel to show updated status
+                    loadPanel('supertrend');
+                } else {
+                    alert('Error: ' + result.error);
+                    // Revert the toggle if there was an error
+                    loadPanel('supertrend');
+                }
+            } catch (error) {
+                alert('Error toggling strategy: ' + error.message);
+                // Revert the toggle if there was an error
+                loadPanel('supertrend');
+            }
+        }
+        
+        // Toggle logs
+        async function toggleLogs() {
+            const logsContent = document.getElementById('logsContent');
+            const isVisible = logsContent.style.display !== 'none';
+            logsContent.style.display = isVisible ? 'none' : 'block';
+            
+            if (!isVisible) {
+                // Load real-time logs when opening
+                await refreshLogs();
+            }
+        }
+        
+        // Refresh logs function
+        async function refreshLogs() {
+            const logsContent = document.getElementById('logsContent');
+            logsContent.innerHTML = '<div class="text-muted">Loading logs...</div>';
+            
+            try {
+                const response = await fetch('/api/strategy/supertrend/logs');
+                const data = await response.json();
+                
+                if (data.error) {
+                    logsContent.innerHTML = `<div class="alert alert-warning">Error loading logs: ${data.error}</div>`;
+                    return;
+                }
+                
+                if (data.logs && data.logs.length > 0) {
+                    const logsHtml = data.logs.map(log => {
+                        const timestamp = new Date(log.timestamp).toLocaleString();
+                        const levelClass = log.level.toLowerCase() === 'error' ? 'text-danger' : 
+                                          log.level.toLowerCase() === 'warning' ? 'text-warning' : 'text-info';
+                        return `<div class="log-entry ${levelClass}">
+                                    <small class="text-muted">[${timestamp}]</small> 
+                                    <span class="badge bg-secondary me-2">${log.level}</span>
+                                    ${log.message}
+                                </div>`;
+                    }).join('');
+                    
+                    logsContent.innerHTML = `
+                        <div class="logs-header d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">Showing last ${data.logs.length} logs</small>
+                            <small class="text-muted">Last updated: ${new Date().toLocaleTimeString()}</small>
+                        </div>
+                        <div class="logs-container" style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 1rem; background-color: #f8f9fa;">
+                            ${logsHtml}
+                        </div>
+                    `;
+                } else {
+                    logsContent.innerHTML = `
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            No logs found for SuperTrend strategy. Logs will appear here when the strategy is running.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+                logsContent.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error loading logs: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        // Save strategy config
+        async function saveStrategyConfig() {
+            const data = {
+                broker_connection_id: document.getElementById('brokerSelect').value,
+                take_profit_multiplier: parseFloat(document.getElementById('takeProfitMultiplier').value),
+                trailing_stop: document.getElementById('trailingStop').value === 'true',
+                candle_size: document.getElementById('candleSize').value,
+                supertrend_period: parseInt(document.getElementById('supertrendPeriod').value),
+                supertrend_multiplier: parseFloat(document.getElementById('supertrendMultiplier').value),
+                is_active: false
+            };
+            
+            try {
+                const response = await fetch('/api/strategy/supertrend/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Strategy configuration saved successfully!');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error saving strategy configuration: ' + error.message);
+            }
+        }
+        
+        // Save and start strategy
+        async function saveAndStartStrategy() {
+            const data = {
+                broker_connection_id: document.getElementById('brokerSelect').value,
+                take_profit_multiplier: parseFloat(document.getElementById('takeProfitMultiplier').value),
+                trailing_stop: document.getElementById('trailingStop').value === 'true',
+                candle_size: document.getElementById('candleSize').value,
+                supertrend_period: parseInt(document.getElementById('supertrendPeriod').value),
+                supertrend_multiplier: parseFloat(document.getElementById('supertrendMultiplier').value),
+                is_active: true
+            };
+            
+            try {
+                // First save configuration
+                const configResponse = await fetch('/api/strategy/supertrend/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const configResult = await configResponse.json();
+                if (!configResult.success) {
+                    alert('Error saving configuration: ' + configResult.error);
+                    return;
+                }
+                
+                // Then start strategy
+                const startResponse = await fetch('/api/strategy/supertrend/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_running: true })
+                });
+                
+                const startResult = await startResponse.json();
+                if (startResult.success) {
+                    alert('Strategy configuration saved and started successfully!');
+                    loadPanel('supertrend'); // Reload to show updated status
+                } else {
+                    alert('Error starting strategy: ' + startResult.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

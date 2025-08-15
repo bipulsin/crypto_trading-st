@@ -1,0 +1,8 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="24" height="24" rx="4" fill="#0d6efd"/>
+  <path d="M7 7L12 17L17 7H7Z" fill="white"/>
+  <path d="M8 8L12 16L16 8H8Z" fill="#0d6efd"/>
+  <text x="12" y="20" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="6" font-weight="bold">Δ</text>
+</svg>
+
+
